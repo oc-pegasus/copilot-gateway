@@ -4,6 +4,20 @@
 import { html } from "hono/html";
 import { Layout } from "./layout.tsx";
 
+/** Reusable code block with Prism.js syntax highlighting and copy button */
+function codeBlock(lang: string, ref: string, snippetFn: string, copyId: string) {
+  return html`
+    <div class="relative group">
+      <pre class="bg-surface-900 rounded-xl p-4 pr-10 overflow-x-auto border border-white/[0.04]"><code class="language-${lang}" x-ref="${ref}" x-effect="$el.textContent = ${snippetFn}(); Prism.highlightElement($el)"></code></pre>
+      <button @click="copySnippet(${snippetFn}(), '${copyId}')"
+        class="absolute top-2.5 right-2.5 p-1.5 rounded-md bg-surface-700/80 text-gray-500 hover:text-accent-cyan hover:bg-surface-600 transition-all opacity-0 group-hover:opacity-100"
+        :title="copied === '${copyId}' ? 'Copied!' : 'Copy'">
+        <svg x-show="copied !== '${copyId}'" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <svg x-show="copied === '${copyId}'" class="w-3.5 h-3.5 text-accent-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+    </div>`;
+}
+
 export function DashboardPage() {
   return Layout({
     title: "Dashboard",
@@ -60,7 +74,7 @@ export function DashboardPage() {
           <div x-show="tab === 'upstream'" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
 
             <!-- GitHub Connection Banner -->
-            <template x-if="!githubConnected">
+            <template x-if="meLoaded && !githubConnected">
               <div class="glass-card p-6 mb-8 glow-border animate-in flex items-center justify-between">
                 <div>
                   <h3 class="text-white font-medium mb-1">Connect GitHub Account</h3>
@@ -208,7 +222,7 @@ export function DashboardPage() {
                     <button @click="disconnectGithub()" class="btn-ghost text-xs">Disconnect</button>
                   </div>
                 </template>
-                <template x-if="!user && githubConnected">
+                <template x-if="!user && !meLoaded">
                   <div class="flex items-center gap-4">
                     <div class="w-12 h-12 rounded-xl bg-surface-600 animate-pulse"></div>
                     <div class="space-y-2">
@@ -217,7 +231,16 @@ export function DashboardPage() {
                     </div>
                   </div>
                 </template>
-                <template x-if="!githubConnected">
+                <template x-if="!user && meLoaded && githubConnected">
+                  <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-surface-600 animate-pulse"></div>
+                    <div class="space-y-2">
+                      <div class="h-4 w-32 bg-surface-600 rounded animate-pulse"></div>
+                      <div class="h-3 w-24 bg-surface-600 rounded animate-pulse"></div>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="!user && meLoaded && !githubConnected">
                   <p class="text-sm text-gray-500">No GitHub account connected</p>
                 </template>
               </div>
@@ -405,15 +428,7 @@ export function DashboardPage() {
                     </div>
 
                     <p class="text-[11px] text-gray-600 mb-2">Add to <code class="text-gray-500">~/.bashrc</code>, <code class="text-gray-500">~/.zshrc</code>, or equivalent</p>
-                    <div class="relative group">
-                      <pre class="bg-surface-900 rounded-xl p-4 pr-10 overflow-x-auto border border-white/[0.04]"><code class="language-bash" x-ref="claudeCode" x-effect="$el.textContent = claudeCodeSnippet(); Prism.highlightElement($el)"></code></pre>
-                      <button @click="copySnippet(claudeCodeSnippet(), 'claude')"
-                        class="absolute top-2.5 right-2.5 p-1.5 rounded-md bg-surface-700/80 text-gray-500 hover:text-accent-cyan hover:bg-surface-600 transition-all opacity-0 group-hover:opacity-100"
-                        :title="copied === 'claude' ? 'Copied!' : 'Copy'">
-                        <svg x-show="copied !== 'claude'" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                        <svg x-show="copied === 'claude'" class="w-3.5 h-3.5 text-accent-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                      </button>
-                    </div>
+                    ${codeBlock("bash", "claudeCode", "claudeCodeSnippet", "claude")}
                   </div>
 
                   <!-- Codex -->
@@ -434,26 +449,10 @@ export function DashboardPage() {
                     </div>
 
                     <p class="text-[11px] text-gray-600 mb-2">Add to <code class="text-gray-500">~/.codex/config.toml</code></p>
-                    <div class="relative group">
-                      <pre class="bg-surface-900 rounded-xl p-4 pr-10 overflow-x-auto border border-white/[0.04]"><code class="language-toml" x-ref="codexCode" x-effect="$el.textContent = codexSnippet(); Prism.highlightElement($el)"></code></pre>
-                      <button @click="copySnippet(codexSnippet(), 'codex')"
-                        class="absolute top-2.5 right-2.5 p-1.5 rounded-md bg-surface-700/80 text-gray-500 hover:text-accent-cyan hover:bg-surface-600 transition-all opacity-0 group-hover:opacity-100"
-                        :title="copied === 'codex' ? 'Copied!' : 'Copy'">
-                        <svg x-show="copied !== 'codex'" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                        <svg x-show="copied === 'codex'" class="w-3.5 h-3.5 text-accent-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                      </button>
-                    </div>
+                    ${codeBlock("toml", "codexCode", "codexSnippet", "codex")}
 
                     <p class="text-[11px] text-gray-600 mt-4 mb-2">Add to <code class="text-gray-500">~/.bashrc</code>, <code class="text-gray-500">~/.zshrc</code>, or equivalent</p>
-                    <div class="relative group">
-                      <pre class="bg-surface-900 rounded-xl p-4 pr-10 overflow-x-auto border border-white/[0.04]"><code class="language-bash" x-ref="codexEnv" x-effect="$el.textContent = codexEnvSnippet(); Prism.highlightElement($el)"></code></pre>
-                      <button @click="copySnippet(codexEnvSnippet(), 'codexEnv')"
-                        class="absolute top-2.5 right-2.5 p-1.5 rounded-md bg-surface-700/80 text-gray-500 hover:text-accent-cyan hover:bg-surface-600 transition-all opacity-0 group-hover:opacity-100"
-                        :title="copied === 'codexEnv' ? 'Copied!' : 'Copy'">
-                        <svg x-show="copied !== 'codexEnv'" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                        <svg x-show="copied === 'codexEnv'" class="w-3.5 h-3.5 text-accent-emerald" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                      </button>
-                    </div>
+                    ${codeBlock("bash", "codexEnv", "codexEnvSnippet", "codexEnv")}
                   </div>
                 </div>
               </template>
@@ -559,6 +558,7 @@ export function DashboardPage() {
             tab: initTab,
 
             // Upstream
+            meLoaded: false,
             user: null,
             githubConnected: false,
             usageData: null,
@@ -704,6 +704,7 @@ export function DashboardPage() {
                 this.githubConnected = data.github_connected;
                 this.user = data.user;
               } catch (e) { console.error('loadMe:', e); }
+              finally { this.meLoaded = true; }
             },
 
             async loadUsage() {
