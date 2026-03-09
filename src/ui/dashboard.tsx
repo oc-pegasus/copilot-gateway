@@ -26,16 +26,6 @@ export function DashboardPage() {
               </div>
               <span class="font-semibold text-white text-sm tracking-tight">Copilot Gateway</span>
             </div>
-
-            <div class="flex items-center gap-4">
-              <template x-if="user">
-                <div class="flex items-center gap-3">
-                  <img :src="user.avatar_url" class="w-7 h-7 rounded-full ring-2 ring-accent-cyan/20" />
-                  <span class="text-sm text-gray-300" x-text="user.login"></span>
-                </div>
-              </template>
-              <button @click="logout()" class="btn-ghost text-xs">Logout</button>
-            </div>
           </div>
 
           <!-- Tab bar -->
@@ -201,7 +191,10 @@ export function DashboardPage() {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
               <!-- Account Info -->
               <div class="glass-card p-6 animate-in delay-4">
-                <h3 class="text-xs font-medium text-gray-500 uppercase tracking-widest mb-4">Account</h3>
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-xs font-medium text-gray-500 uppercase tracking-widest">Account</h3>
+                  <button @click="logout()" class="btn-ghost text-xs">Logout</button>
+                </div>
                 <template x-if="user">
                   <div class="flex items-center gap-4">
                     <img :src="user.avatar_url" class="w-12 h-12 rounded-xl ring-2 ring-white/5" />
