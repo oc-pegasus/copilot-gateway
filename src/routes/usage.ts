@@ -1,0 +1,61 @@
+// GET /usage — fetch Copilot usage/quota info from GitHub API
+
+import type { Context } from "hono";
+import { githubHeaders } from "../lib/copilot.ts";
+import { getGithubTokenAsync } from "../middleware/auth.ts";
+
+export interface QuotaDetail {
+  entitlement: number;
+  overage_count: number;
+  overage_permitted: boolean;
+  percent_remaining: number;
+  quota_id: string;
+  quota_remaining: number;
+  remaining: number;
+  unlimited: boolean;
+}
+
+export interface CopilotUsageResponse {
+  access_type_sku: string;
+  analytics_tracking_id: string;
+  assigned_date: string;
+  can_signup_for_limited: boolean;
+  chat_enabled: boolean;
+  copilot_plan: string;
+  organization_login_list: unknown[];
+  organization_list: unknown[];
+  quota_reset_date: string;
+  quota_snapshots: {
+    chat: QuotaDetail;
+    completions: QuotaDetail;
+    premium_interactions: QuotaDetail;
+  };
+}
+
+export const usage = async (c: Context) => {
+  try {
+    const githubToken = await getGithubTokenAsync();
+    if (!githubToken) {
+      return c.json({ error: "GitHub token not configured" }, 500);
+    }
+
+    const resp = await fetch(
+      "https://api.github.com/copilot_internal/user",
+      { headers: await githubHeaders(githubToken) },
+    );
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      return c.json(
+        { error: `GitHub API error: ${resp.status} ${text}` },
+        resp.status as 400 | 401 | 403 | 404 | 500,
+      );
+    }
+
+    const data = (await resp.json()) as CopilotUsageResponse;
+    return c.json(data);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return c.json({ error: msg }, 502);
+  }
+};
