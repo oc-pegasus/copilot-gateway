@@ -3,6 +3,7 @@
 
 import type { Context, Next } from "hono";
 import { recordUsage } from "../lib/usage-tracker.ts";
+import { touchApiKeyLastUsed } from "../lib/api-keys.ts";
 
 const API_PATHS = new Set([
   "/v1/messages", "/v1/chat/completions", "/v1/responses", "/v1/embeddings",
@@ -54,6 +55,11 @@ async function interceptNonStreaming(c: Context, keyId: string, model: string): 
     recordUsage(keyId, model, usage.input, usage.output).catch((e) =>
       console.error("Usage record error:", e)
     );
+    if (keyId !== "admin") {
+      touchApiKeyLastUsed(keyId).catch((e) =>
+        console.error("Touch lastUsedAt error:", e)
+      );
+    }
   }
 }
 
@@ -108,6 +114,11 @@ function interceptStreaming(c: Context, keyId: string, model: string): void {
         recordUsage(keyId, model, inputTokens, outputTokens).catch((e) =>
           console.error("Usage record error:", e)
         );
+        if (keyId !== "admin") {
+          touchApiKeyLastUsed(keyId).catch((e) =>
+            console.error("Touch lastUsedAt error:", e)
+          );
+        }
       }
     },
   });

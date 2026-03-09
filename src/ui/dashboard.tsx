@@ -330,6 +330,7 @@ export function DashboardPage() {
                         <th class="text-left py-2 pr-4 text-xs font-medium text-gray-500 uppercase tracking-widest">Name</th>
                         <th class="text-left py-2 pr-4 text-xs font-medium text-gray-500 uppercase tracking-widest">Key</th>
                         <th class="text-left py-2 pr-4 text-xs font-medium text-gray-500 uppercase tracking-widest">Created</th>
+                        <th class="text-left py-2 pr-4 text-xs font-medium text-gray-500 uppercase tracking-widest">Last Used</th>
                         <th x-show="isAdmin" class="text-right py-2 text-xs font-medium text-gray-500 uppercase tracking-widest">Actions</th>
                       </tr>
                     </thead>
@@ -343,7 +344,11 @@ export function DashboardPage() {
                             <code class="text-xs font-mono text-gray-500 bg-surface-800 rounded px-2 py-1" x-text="'...' + k.key_hint"></code>
                           </td>
                           <td class="py-3 pr-4">
-                            <span class="text-gray-500 text-xs" x-text="formatDate(k.created_at)"></span>
+                            <span class="text-gray-500 text-xs cursor-default" :title="fullDateTime(k.created_at)" x-text="timeAgo(k.created_at)"></span>
+                          </td>
+                          <td class="py-3 pr-4">
+                            <span x-show="k.last_used_at" class="text-gray-500 text-xs cursor-default" :title="fullDateTime(k.last_used_at)" x-text="timeAgo(k.last_used_at)"></span>
+                            <span x-show="!k.last_used_at" class="text-gray-600 text-xs">Never</span>
                           </td>
                           <td x-show="isAdmin" class="py-3 text-right">
                             <div class="flex items-center justify-end gap-1">
@@ -569,6 +574,7 @@ export function DashboardPage() {
             // Keys
             keys: [],
             keysLoading: false,
+            now: Date.now(),
             newKeyName: '',
             newKeyResult: null,
             keyCreating: false,
@@ -595,6 +601,29 @@ export function DashboardPage() {
             get baseUrl() { return location.origin; },
 
             get activeKey() { return this.isAdmin ? (this.newKeyResult?.key || '<your-api-key>') : this.accessKey; },
+
+            timeAgo(dateStr) {
+              if (!dateStr) return null;
+              const date = new Date(dateStr);
+              const diff = this.now - date;
+              const seconds = Math.floor(diff / 1000);
+              if (seconds < 60) return 'just now';
+              const minutes = Math.floor(seconds / 60);
+              if (minutes < 60) return minutes + (minutes === 1 ? ' minute ago' : ' minutes ago');
+              const hours = Math.floor(minutes / 60);
+              if (hours < 24) return hours + (hours === 1 ? ' hour ago' : ' hours ago');
+              const days = Math.floor(hours / 24);
+              if (days <= 30) return days + (days === 1 ? ' day ago' : ' days ago');
+              return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            },
+
+            fullDateTime(dateStr) {
+              if (!dateStr) return '';
+              const d = new Date(dateStr);
+              const p = n => String(n).padStart(2, '0');
+              return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate())
+                + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+            },
 
             claudeCodeSnippet() {
               const lines = [
@@ -642,6 +671,9 @@ export function DashboardPage() {
                 if (this.isAdmin) this.loadUsage();
                 if (this.tab === 'usage') this.loadTokenUsage();
               }, 60000);
+
+              // Update "time ago" every 30s
+              setInterval(() => { this.now = Date.now(); }, 30000);
 
               window.addEventListener('hashchange', () => {
                 const h = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : defaultTab;

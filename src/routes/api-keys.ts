@@ -20,6 +20,7 @@ export const listKeys = (c: Context) => {
         name: k.name,
         key_hint: k.key.slice(-4),
         created_at: k.createdAt,
+        last_used_at: k.lastUsedAt ?? null,
       })))
     );
   }
@@ -32,6 +33,7 @@ export const listKeys = (c: Context) => {
       name: k.name,
       key_hint: k.key.slice(-4),
       created_at: k.createdAt,
+      last_used_at: k.lastUsedAt ?? null,
     })));
   });
 };

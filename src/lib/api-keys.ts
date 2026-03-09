@@ -7,6 +7,7 @@ export interface ApiKey {
   name: string;
   key: string;
   createdAt: string;
+  lastUsedAt?: string;
 }
 
 function generateKey(): string {
@@ -59,4 +60,15 @@ export async function validateApiKey(rawKey: string): Promise<{ id: string; name
     }
   }
   return null;
+}
+
+/** Update lastUsedAt timestamp for a key (fire-and-forget, debounced by caller) */
+export async function touchApiKeyLastUsed(id: string): Promise<void> {
+  const existing = await kv.get<ApiKey>(["api_keys", id]);
+  if (!existing.value) return;
+  const updated: ApiKey = {
+    ...existing.value,
+    lastUsedAt: new Date().toISOString(),
+  };
+  await kv.set(["api_keys", id], updated);
 }
