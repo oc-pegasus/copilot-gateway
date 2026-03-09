@@ -10,8 +10,8 @@ import type {
   AnthropicToolUseBlock,
   AnthropicUserContentBlock,
   AnthropicUserMessage,
-} from "./anthropic-types.ts";
-import { THINKING_PLACEHOLDER } from "./anthropic-types.ts";
+} from "../anthropic-types.ts";
+import { THINKING_PLACEHOLDER } from "../anthropic-types.ts";
 
 import type {
   ChatCompletionResponse,
@@ -19,15 +19,46 @@ import type {
   ContentPart,
   Message,
   Tool,
-} from "./openai-types.ts";
+} from "../openai-types.ts";
 
-import { mapStopReason } from "./stop-reason.ts";
-import { mapOpenAIUsage } from "./usage.ts";
+// ── Shared helpers (used by openai-stream.ts too) ──
 
 export function toAnthropicId(id: string): string {
   if (id.startsWith("msg_")) return id;
   return `msg_${id.replace(/^chatcmpl-/, "")}`;
 }
+
+export function mapStopReason(
+  reason: "stop" | "length" | "tool_calls" | "content_filter" | null,
+): AnthropicResponse["stop_reason"] {
+  if (reason === null) return null;
+  const map = {
+    stop: "end_turn",
+    length: "max_tokens",
+    tool_calls: "tool_use",
+    content_filter: "refusal",
+  } as const;
+  return map[reason];
+}
+
+interface OpenAIUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+}
+
+export const mapOpenAIUsage = (
+  usage?: OpenAIUsage,
+): AnthropicResponse["usage"] => {
+  const cachedTokens = usage?.prompt_tokens_details?.cached_tokens;
+  return {
+    input_tokens: (usage?.prompt_tokens ?? 0) - (cachedTokens ?? 0),
+    output_tokens: usage?.completion_tokens ?? 0,
+    ...(cachedTokens !== undefined && {
+      cache_read_input_tokens: cachedTokens,
+    }),
+  };
+};
 
 // ── Request: Anthropic → OpenAI ──
 

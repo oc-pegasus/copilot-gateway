@@ -1,8 +1,8 @@
-// GET /usage — fetch Copilot usage/quota info from GitHub API
+// GET /api/usage — fetch Copilot usage/quota info from GitHub API
 
 import type { Context } from "hono";
 import { githubHeaders } from "../lib/copilot.ts";
-import { getGithubTokenAsync } from "../middleware/auth.ts";
+import { getGithubToken } from "../lib/session.ts";
 
 export interface QuotaDetail {
   entitlement: number;
@@ -32,9 +32,9 @@ export interface CopilotUsageResponse {
   };
 }
 
-export const usage = async (c: Context) => {
+export const copilotQuota = async (c: Context) => {
   try {
-    const githubToken = await getGithubTokenAsync();
+    const githubToken = await getGithubToken();
     if (!githubToken) {
       return c.json({ error: "GitHub token not configured" }, 500);
     }

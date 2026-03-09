@@ -1,5 +1,5 @@
-import type { AnthropicStreamEventData, AnthropicResponse } from "./anthropic-types.ts";
-import { THINKING_PLACEHOLDER } from "./anthropic-types.ts";
+import type { AnthropicStreamEventData, AnthropicResponse } from "../anthropic-types.ts";
+import { THINKING_PLACEHOLDER } from "../anthropic-types.ts";
 import type {
   ResponseStreamEvent,
   ResponsesResult,
@@ -7,7 +7,7 @@ import type {
   ResponseOutputFunctionCall,
   ResponseOutputMessage,
   ResponseOutputReasoning,
-} from "./responses-types.ts";
+} from "../responses-types.ts";
 
 type OutputBlockInfo =
   | { type: "thinking"; outputIndex: number; thinkingText: string; signature: string }

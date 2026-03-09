@@ -10,8 +10,8 @@ import type {
   AnthropicUserContentBlock,
   AnthropicUserMessage,
   AnthropicTool,
-} from "./anthropic-types.ts";
-import { THINKING_PLACEHOLDER } from "./anthropic-types.ts";
+} from "../anthropic-types.ts";
+import { THINKING_PLACEHOLDER } from "../anthropic-types.ts";
 
 import type {
   ResponseInputContent,
@@ -28,7 +28,7 @@ import type {
   ResponsesResult,
   ResponseTool,
   ResponseToolChoice,
-} from "./responses-types.ts";
+} from "../responses-types.ts";
 
 // ── Request: Anthropic → Responses ──
 

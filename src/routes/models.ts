@@ -2,11 +2,12 @@
 
 import type { Context } from "hono";
 import { copilotFetch } from "../lib/copilot.ts";
-import { getEnv, getGithubTokenAsync } from "../middleware/auth.ts";
+import { getEnv } from "../lib/env.ts";
+import { getGithubToken } from "../lib/session.ts";
 
 export const models = async (c: Context) => {
   try {
-    const githubToken = await getGithubTokenAsync();
+    const githubToken = await getGithubToken();
     const resp = await copilotFetch(
       "/models",
       { method: "GET" },

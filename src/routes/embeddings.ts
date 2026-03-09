@@ -2,12 +2,13 @@
 
 import type { Context } from "hono";
 import { copilotFetch } from "../lib/copilot.ts";
-import { getEnv, getGithubTokenAsync } from "../middleware/auth.ts";
+import { getEnv } from "../lib/env.ts";
+import { getGithubToken } from "../lib/session.ts";
 
 export const embeddings = async (c: Context) => {
   try {
     const body = await c.req.text();
-    const githubToken = await getGithubTokenAsync();
+    const githubToken = await getGithubToken();
     const resp = await copilotFetch(
       "/embeddings",
       { method: "POST", body },

@@ -1,0 +1,159 @@
+// Usage tracking middleware — intercepts responses to extract token usage
+// without modifying route handlers
+
+import type { Context, Next } from "hono";
+import { recordUsage } from "../lib/usage-tracker.ts";
+
+const API_PATHS = new Set([
+  "/v1/messages", "/v1/chat/completions", "/v1/responses", "/v1/embeddings",
+  "/messages", "/chat/completions", "/responses", "/embeddings",
+]);
+
+export const usageMiddleware = async (c: Context, next: Next) => {
+  if (!API_PATHS.has(c.req.path) || c.req.method !== "POST") {
+    return next();
+  }
+
+  // Extract model from request body
+  let model = "unknown";
+  try {
+    const cloned = c.req.raw.clone();
+    const body = await cloned.json();
+    if (typeof body.model === "string") model = body.model;
+  } catch { /* ignore parse errors */ }
+
+  await next();
+
+  const keyId: string | undefined = c.get("apiKeyId");
+  if (!keyId) return;
+
+  const contentType = c.res.headers.get("content-type") ?? "";
+  const status = c.res.status;
+  if (status < 200 || status >= 300) return; // skip error responses
+
+  try {
+    if (contentType.includes("text/event-stream")) {
+      interceptStreaming(c, keyId, model);
+    } else {
+      await interceptNonStreaming(c, keyId, model);
+    }
+  } catch (e) {
+    console.error("Usage tracking error:", e);
+  }
+};
+
+async function interceptNonStreaming(c: Context, keyId: string, model: string): Promise<void> {
+  const original = c.res;
+  const cloned = original.clone();
+  // deno-lint-ignore no-explicit-any
+  let json: any;
+  try { json = await cloned.json(); } catch { return; }
+
+  const usage = extractUsageFromJson(json);
+  if (usage) {
+    recordUsage(keyId, model, usage.input, usage.output).catch((e) =>
+      console.error("Usage record error:", e)
+    );
+  }
+}
+
+function interceptStreaming(c: Context, keyId: string, model: string): void {
+  const original = c.res;
+  const body = original.body;
+  if (!body) return;
+
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let buffer = "";
+
+  const transform = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      controller.enqueue(chunk);
+
+      // Parse SSE lines to find usage
+      buffer += new TextDecoder().decode(chunk);
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? ""; // keep incomplete line
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const data = line.slice(6).trim();
+        if (!data || data === "[DONE]") continue;
+
+        try {
+          const parsed = JSON.parse(data);
+          extractUsageFromStreamEvent(parsed, (i, o) => {
+            inputTokens += i;
+            outputTokens += o;
+          });
+        } catch { /* ignore non-JSON lines */ }
+      }
+    },
+    flush() {
+      // Process any remaining buffer
+      if (buffer.startsWith("data: ")) {
+        const data = buffer.slice(6).trim();
+        if (data && data !== "[DONE]") {
+          try {
+            const parsed = JSON.parse(data);
+            extractUsageFromStreamEvent(parsed, (i, o) => {
+              inputTokens += i;
+              outputTokens += o;
+            });
+          } catch { /* ignore */ }
+        }
+      }
+
+      if (inputTokens > 0 || outputTokens > 0) {
+        recordUsage(keyId, model, inputTokens, outputTokens).catch((e) =>
+          console.error("Usage record error:", e)
+        );
+      }
+    },
+  });
+
+  const newBody = body.pipeThrough(transform);
+  c.res = new Response(newBody, {
+    status: original.status,
+    headers: original.headers,
+  });
+}
+
+interface UsageInfo {
+  input: number;
+  output: number;
+}
+
+// deno-lint-ignore no-explicit-any
+function extractUsageFromJson(json: any): UsageInfo | null {
+  // Anthropic Messages: { usage: { input_tokens, output_tokens } }
+  if (json?.usage?.input_tokens != null) {
+    return { input: json.usage.input_tokens, output: json.usage.output_tokens ?? 0 };
+  }
+  // OpenAI Chat Completions: { usage: { prompt_tokens, completion_tokens } }
+  if (json?.usage?.prompt_tokens != null) {
+    return { input: json.usage.prompt_tokens, output: json.usage.completion_tokens ?? 0 };
+  }
+  return null;
+}
+
+// deno-lint-ignore no-explicit-any
+function extractUsageFromStreamEvent(parsed: any, add: (input: number, output: number) => void): void {
+  // Anthropic message_start: { message: { usage: { input_tokens } } }
+  if (parsed.type === "message_start" && parsed.message?.usage?.input_tokens != null) {
+    add(parsed.message.usage.input_tokens, 0);
+  }
+  // Anthropic message_delta: { usage: { output_tokens } }
+  if (parsed.type === "message_delta" && parsed.usage?.output_tokens != null) {
+    add(0, parsed.usage.output_tokens);
+  }
+  // Responses response.completed: { response: { usage: { input_tokens, output_tokens } } }
+  if (parsed.type === "response.completed" && parsed.response?.usage) {
+    const u = parsed.response.usage;
+    add(u.input_tokens ?? 0, u.output_tokens ?? 0);
+  }
+  // OpenAI Chat Completions chunk with usage
+  if (parsed.usage?.prompt_tokens != null) {
+    add(parsed.usage.prompt_tokens, parsed.usage.completion_tokens ?? 0);
+  }
+}

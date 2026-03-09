@@ -1,10 +1,10 @@
 import type { Context, Next } from "hono";
-import { getGithubToken } from "../lib/session.ts";
+import { getEnv } from "../lib/env.ts";
+import { validateApiKey } from "../lib/api-keys.ts";
 
 const PUBLIC_PATHS = new Set(["/", "/dashboard"]);
 const AUTH_VALIDATE_PATHS = new Set(["/auth/login"]);
 
-// deno-lint-ignore require-await
 export const authMiddleware = async (c: Context, next: Next) => {
   const path = c.req.path;
 
@@ -12,12 +12,23 @@ export const authMiddleware = async (c: Context, next: Next) => {
   if (AUTH_VALIDATE_PATHS.has(path) && c.req.method === "POST") return next();
 
   const key = extractKey(c);
-  const expectedKey = getEnv("ACCESS_KEY");
-  if (!expectedKey || key !== expectedKey) {
-    return c.json({ error: "Unauthorized" }, 401);
+  if (!key) return c.json({ error: "Unauthorized" }, 401);
+
+  // Admin key (ACCESS_KEY env var) — backward compatible
+  const adminKey = getEnv("ACCESS_KEY");
+  if (adminKey && key === adminKey) {
+    c.set("apiKeyId", "admin");
+    return next();
   }
 
-  return next();
+  // Multi-key lookup
+  const result = await validateApiKey(key);
+  if (result) {
+    c.set("apiKeyId", result.id);
+    return next();
+  }
+
+  return c.json({ error: "Unauthorized" }, 401);
 };
 
 function extractKey(c: Context): string | null {
@@ -28,13 +39,4 @@ function extractKey(c: Context): string | null {
     c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ??
     null
   );
-}
-
-export function getEnv(name: string): string {
-  // deno-lint-ignore no-explicit-any
-  return (Deno as any).env.get(name) ?? "";
-}
-
-export function getGithubTokenAsync(): Promise<string> {
-  return getGithubToken();
 }

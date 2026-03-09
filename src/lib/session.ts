@@ -1,7 +1,7 @@
 // Global KV store — GitHub token & user info (no sessions, no expiry)
 // Single-user architecture: one GitHub token stored globally
 
-const kv = await Deno.openKv();
+import { kv } from "./kv.ts";
 
 export interface GitHubUser {
   login: string;

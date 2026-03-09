@@ -1,18 +1,19 @@
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { copilotFetch, type CopilotFetchOptions } from "../lib/copilot.ts";
-import { getEnv, getGithubTokenAsync } from "../middleware/auth.ts";
+import { getEnv } from "../lib/env.ts";
+import { getGithubToken } from "../lib/session.ts";
 import { modelSupportsEndpoint } from "../lib/models-cache.ts";
 import type { ResponsesPayload } from "../lib/responses-types.ts";
 import type { AnthropicResponse } from "../lib/anthropic-types.ts";
 import {
   translateResponsesToAnthropicPayload,
   translateAnthropicToResponsesResult,
-} from "../lib/translate-responses.ts";
+} from "../lib/translate/responses.ts";
 import {
   createAnthropicToResponsesStreamState,
   translateAnthropicEventToResponsesEvents,
-} from "../lib/translate-anthropic-to-responses-stream.ts";
+} from "../lib/translate/anthropic-to-responses-stream.ts";
 import { parseSSEStream } from "../lib/sse.ts";
 
 function hasVision(payload: Record<string, unknown>): boolean {
@@ -93,7 +94,7 @@ function fixStreamIds(data: string, event: string | undefined, tracker: StreamId
 export const responses = async (c: Context) => {
   try {
     const payload = await c.req.json<Record<string, unknown>>();
-    const githubToken = await getGithubTokenAsync();
+    const githubToken = await getGithubToken();
     const accountType = getEnv("ACCOUNT_TYPE");
     const model = payload.model as string;
 

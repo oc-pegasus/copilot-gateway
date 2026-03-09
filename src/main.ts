@@ -6,13 +6,13 @@
 //   POST /v1/embeddings         (OpenAI-compatible, passthrough)
 //   POST /v1/responses          (OpenAI Responses API, passthrough)
 //   GET  /v1/models
-//   GET  /usage
+//   GET  /api/usage
 //
 // Frontend:
 //   GET  /              — Login page (or JSON health check for API clients)
 //   GET  /dashboard     — Usage dashboard
 //
-// Auth: unified ACCESS_KEY via ?key=, x-api-key header, or Authorization: Bearer header
+// Auth: ACCESS_KEY (admin) or per-key API keys via ?key=, x-api-key, or Authorization: Bearer
 // Frontend auth: ACCESS_KEY stored in localStorage, sent as x-api-key header
 
 import { Hono } from "hono";
@@ -22,7 +22,7 @@ import { chatCompletions } from "./routes/chat-completions.ts";
 import { models } from "./routes/models.ts";
 import { messages } from "./routes/messages.ts";
 import { embeddings } from "./routes/embeddings.ts";
-import { usage } from "./routes/usage.ts";
+import { copilotQuota } from "./routes/copilot-quota.ts";
 import { responses } from "./routes/responses.ts";
 import { countTokens } from "./routes/count-tokens.ts";
 import {
@@ -33,31 +33,35 @@ import {
   authMe,
 } from "./routes/auth.ts";
 import { authMiddleware } from "./middleware/auth.ts";
-import { loginPage, dashboardPage } from "./routes/pages.tsx";
+import { usageMiddleware } from "./middleware/usage.ts";
+import { LoginPage } from "./ui/login.tsx";
+import { DashboardPage } from "./ui/dashboard.tsx";
+import { listKeys, createKey, deleteKey } from "./routes/api-keys.ts";
+import { tokenUsage } from "./routes/token-usage.ts";
 
 const app = new Hono();
 
 app.use("*", logger());
 app.use("*", cors());
 app.use("*", authMiddleware);
+app.use("*", usageMiddleware);
 
 // Frontend pages (public — auth handled client-side)
 app.get("/", (c) => {
-  // If Accept header prefers JSON (API clients), return health check
   const accept = c.req.header("accept") ?? "";
-  if (
-    accept.includes("application/json") &&
-    !accept.includes("text/html")
-  ) {
+  if (accept.includes("application/json") && !accept.includes("text/html")) {
     return c.json({ status: "ok", service: "copilot-deno" });
   }
-  // Browser requests get the login page
-  return loginPage(c);
+  return c.html(LoginPage());
 });
-app.get("/dashboard", dashboardPage);
+app.get("/dashboard", (c) => c.html(DashboardPage()));
 
-// Dashboard API (same ACCESS_KEY auth as everything else)
-app.get("/api/usage", usage);
+// Dashboard API
+app.get("/api/usage", copilotQuota);
+app.get("/api/token-usage", tokenUsage);
+app.get("/api/keys", listKeys);
+app.post("/api/keys", createKey);
+app.delete("/api/keys/:id", deleteKey);
 
 // OpenAI-compatible
 app.post("/v1/chat/completions", chatCompletions);
@@ -73,8 +77,8 @@ app.post("/responses", responses);
 app.post("/v1/messages", messages);
 app.post("/v1/messages/count_tokens", countTokens);
 
-// Usage (API key auth)
-app.get("/usage", usage);
+// Copilot quota (legacy path)
+app.get("/usage", copilotQuota);
 
 // Auth
 app.post("/auth/login", authLogin);

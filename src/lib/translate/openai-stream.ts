@@ -1,12 +1,10 @@
 import type {
   AnthropicStreamEventData,
   AnthropicStreamState,
-} from "./anthropic-types.ts";
-import { THINKING_PLACEHOLDER } from "./anthropic-types.ts";
-import type { ChatCompletionChunk } from "./openai-types.ts";
-import { mapStopReason } from "./stop-reason.ts";
-import { mapOpenAIUsage } from "./usage.ts";
-import { toAnthropicId } from "./translate.ts";
+} from "../anthropic-types.ts";
+import { THINKING_PLACEHOLDER } from "../anthropic-types.ts";
+import type { ChatCompletionChunk } from "../openai-types.ts";
+import { mapStopReason, mapOpenAIUsage, toAnthropicId } from "./openai.ts";
 
 const MAX_CONSECUTIVE_WHITESPACE = 20;
 

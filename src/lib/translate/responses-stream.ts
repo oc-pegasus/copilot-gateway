@@ -1,7 +1,7 @@
-import type { AnthropicStreamEventData } from "./anthropic-types.ts";
-import { THINKING_PLACEHOLDER } from "./anthropic-types.ts";
-import type { ResponseOutputReasoning, ResponsesResult, ResponseStreamEvent } from "./responses-types.ts";
-import { translateResponsesToAnthropic } from "./translate-responses.ts";
+import type { AnthropicStreamEventData } from "../anthropic-types.ts";
+import { THINKING_PLACEHOLDER } from "../anthropic-types.ts";
+import type { ResponseOutputReasoning, ResponsesResult, ResponseStreamEvent } from "../responses-types.ts";
+import { translateResponsesToAnthropic } from "./responses.ts";
 
 const MAX_CONSECUTIVE_WHITESPACE = 20;
 

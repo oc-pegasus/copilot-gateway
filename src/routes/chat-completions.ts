@@ -2,7 +2,8 @@
 
 import type { Context } from "hono";
 import { copilotFetch } from "../lib/copilot.ts";
-import { getEnv, getGithubTokenAsync } from "../middleware/auth.ts";
+import { getEnv } from "../lib/env.ts";
+import { getGithubToken } from "../lib/session.ts";
 
 /** Detect if request body contains image content */
 function hasVision(body: Record<string, unknown>): boolean {
@@ -20,7 +21,7 @@ export const chatCompletions = async (c: Context) => {
   try {
     const body = await c.req.json();
     const vision = hasVision(body);
-    const githubToken = await getGithubTokenAsync();
+    const githubToken = await getGithubToken();
 
     const resp = await copilotFetch(
       "/chat/completions",

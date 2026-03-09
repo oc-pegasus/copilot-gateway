@@ -8,7 +8,7 @@ import {
   setGithubConnection,
   type GitHubUser,
 } from "../lib/session.ts";
-import { getEnv } from "../middleware/auth.ts";
+import { getEnv } from "../lib/env.ts";
 
 // GitHub OAuth app client ID (same as Copilot extension)
 const GITHUB_CLIENT_ID = "Iv1.b507a08c87ecfe98";

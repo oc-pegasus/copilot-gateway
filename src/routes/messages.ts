@@ -1,7 +1,8 @@
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { copilotFetch, type CopilotFetchOptions } from "../lib/copilot.ts";
-import { getEnv, getGithubTokenAsync } from "../middleware/auth.ts";
+import { getEnv } from "../lib/env.ts";
+import { getGithubToken } from "../lib/session.ts";
 import { modelSupportsEndpoint, findModel } from "../lib/models-cache.ts";
 import type {
   AnthropicMessagesPayload,
@@ -9,10 +10,10 @@ import type {
   AnthropicThinkingBlock,
 } from "../lib/anthropic-types.ts";
 import type { ChatCompletionChunk, ChatCompletionResponse } from "../lib/openai-types.ts";
-import { translateToOpenAI, translateToAnthropic } from "../lib/translate.ts";
-import { translateChunkToAnthropicEvents } from "../lib/translate-stream.ts";
-import { translateAnthropicToResponses, translateResponsesToAnthropic } from "../lib/translate-responses.ts";
-import { translateResponsesStreamEvent, createResponsesStreamState } from "../lib/translate-responses-stream.ts";
+import { translateToOpenAI, translateToAnthropic } from "../lib/translate/openai.ts";
+import { translateChunkToAnthropicEvents } from "../lib/translate/openai-stream.ts";
+import { translateAnthropicToResponses, translateResponsesToAnthropic } from "../lib/translate/responses.ts";
+import { translateResponsesStreamEvent, createResponsesStreamState } from "../lib/translate/responses-stream.ts";
 import type { ResponseStreamEvent, ResponsesResult } from "../lib/responses-types.ts";
 import { parseSSEStream } from "../lib/sse.ts";
 
@@ -94,7 +95,7 @@ function noBodyResponse(c: Context) {
 export const messages = async (c: Context) => {
   try {
     const payload = await c.req.json<AnthropicMessagesPayload>();
-    const githubToken = await getGithubTokenAsync();
+    const githubToken = await getGithubToken();
     const accountType = getEnv("ACCOUNT_TYPE");
 
     // Strip web_search tools — Copilot doesn't support them
