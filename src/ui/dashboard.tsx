@@ -803,6 +803,7 @@ export function DashboardPage() {
               this.keyDeleting = id;
               try {
                 await fetch('/api/keys/' + id, { method: 'DELETE', headers: this.authHeaders() });
+                if (this.newKeyResult && this.newKeyResult.id === id) this.newKeyResult = null;
                 await this.loadKeys();
               } catch (e) { console.error('deleteKey:', e); }
               finally { this.keyDeleting = null; }
