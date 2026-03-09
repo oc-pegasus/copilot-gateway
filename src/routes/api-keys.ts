@@ -28,7 +28,7 @@ export const createKey = async (c: Context) => {
   }
 
   const key = await createApiKey(body.name);
-  return c.json({ id: key.id, name: key.name, key: key.key, created_at: key.createdAt }, 201);
+  return c.json(keyToJson(key), 201);
 };
 
 export const deleteKey = async (c: Context) => {
@@ -48,5 +48,5 @@ export const rotateKey = async (c: Context) => {
   const id = c.req.param("id") ?? "";
   const key = await rotateApiKey(id);
   if (!key) return c.json({ error: "Key not found" }, 404);
-  return c.json({ id: key.id, name: key.name, key: key.key, created_at: key.createdAt });
+  return c.json(keyToJson(key));
 };

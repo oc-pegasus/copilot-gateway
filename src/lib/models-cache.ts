@@ -33,15 +33,16 @@ export interface ModelsResponse {
 
 let cachedModels: ModelsResponse | null = null;
 let cachedModelsAt = 0;
+let cachedModelsForToken: string | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-/** Get cached model list, refreshing if stale */
+/** Get cached model list, refreshing if stale or token changed */
 export async function getModels(
   githubToken: string,
   accountType: string,
 ): Promise<ModelsResponse> {
   const now = Date.now();
-  if (cachedModels && now - cachedModelsAt < CACHE_TTL_MS) {
+  if (cachedModels && now - cachedModelsAt < CACHE_TTL_MS && cachedModelsForToken === githubToken) {
     return cachedModels;
   }
 
@@ -56,6 +57,7 @@ export async function getModels(
     if (resp.ok) {
       cachedModels = (await resp.json()) as ModelsResponse;
       cachedModelsAt = now;
+      cachedModelsForToken = githubToken;
       return cachedModels;
     }
   } catch (e) {

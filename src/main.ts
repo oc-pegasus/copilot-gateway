@@ -35,6 +35,7 @@ import {
   authGithub,
   authGithubPoll,
   authGithubDisconnect,
+  authGithubSwitch,
   authMe,
 } from "./routes/auth.ts";
 import { authMiddleware } from "./middleware/auth.ts";
@@ -90,7 +91,8 @@ app.post("/auth/login", authLogin);
 app.post("/auth/logout", authLogout);
 app.get("/auth/github", authGithub);
 app.post("/auth/github/poll", authGithubPoll);
-app.post("/auth/github/disconnect", authGithubDisconnect);
+app.delete("/auth/github/:id", authGithubDisconnect);
+app.post("/auth/github/switch", authGithubSwitch);
 app.get("/auth/me", authMe);
 
 Deno.serve(app.fetch);

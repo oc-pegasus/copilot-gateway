@@ -73,8 +73,8 @@ export function DashboardPage() {
           <template x-if="isAdmin">
           <div x-show="tab === 'upstream'" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
 
-            <!-- GitHub Connection Banner -->
-            <template x-if="meLoaded && !githubConnected">
+            <!-- GitHub Connection Banner (only when no accounts at all) -->
+            <template x-if="meLoaded && githubAccounts.length === 0">
               <div class="glass-card p-6 mb-8 glow-border animate-in flex items-center justify-between">
                 <div>
                   <h3 class="text-white font-medium mb-1">Connect GitHub Account</h3>
@@ -82,7 +82,13 @@ export function DashboardPage() {
                 </div>
                 <button @click="startGithubAuth()" class="btn-primary" :disabled="deviceFlow.loading">
                   <span x-show="!deviceFlow.loading">Connect GitHub</span>
-                  <span x-show="deviceFlow.loading">Connecting...</span>
+                  <span x-show="deviceFlow.loading" class="flex items-center gap-2">
+                    <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" opacity="0.25"/>
+                      <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"/>
+                    </svg>
+                    Connecting…
+                  </span>
                 </button>
               </div>
             </template>
@@ -98,6 +104,7 @@ export function DashboardPage() {
                     <code class="text-3xl font-mono font-bold text-accent-cyan tracking-[0.3em]" x-text="deviceFlow.userCode"></code>
                   </div>
 
+                  <p class="text-gray-500 text-xs text-center mb-2">Visit <a :href="deviceFlow.verificationUri" class="text-accent-cyan hover:underline" x-text="deviceFlow.verificationUri" target="_blank"></a></p>
                   <a :href="deviceFlow.verificationUri" target="_blank"
                      class="btn-primary w-full block text-center mb-4">
                     Open GitHub
@@ -207,41 +214,65 @@ export function DashboardPage() {
 
             <!-- Info Cards -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <!-- Account Info -->
+              <!-- GitHub Accounts -->
               <div class="glass-card p-6 animate-in delay-4">
-                <h3 class="text-xs font-medium text-gray-500 uppercase tracking-widest mb-4">Account</h3>
-                <template x-if="user">
-                  <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-4">
-                      <img :src="user.avatar_url" class="w-12 h-12 rounded-xl ring-2 ring-white/5" />
-                      <div>
-                        <p class="text-white font-medium" x-text="user.name || user.login"></p>
-                        <p class="text-sm text-gray-500" x-text="'@' + user.login"></p>
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-xs font-medium text-gray-500 uppercase tracking-widest">GitHub Accounts</h3>
+                  <template x-if="meLoaded && githubAccounts.length > 0">
+                    <button @click="startGithubAuth()" class="btn-ghost text-xs" :disabled="deviceFlow.loading">
+                      <span x-show="!deviceFlow.loading">+ Add</span>
+                      <span x-show="deviceFlow.loading" class="flex items-center gap-1.5">
+                        <svg class="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" opacity="0.25"/>
+                          <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"/>
+                        </svg>
+                        Adding…
+                      </span>
+                    </button>
+                  </template>
+                </div>
+                <template x-if="!meLoaded">
+                  <div class="space-y-3">
+                    <div class="flex items-center gap-3">
+                      <div class="w-9 h-9 rounded-lg bg-surface-600 animate-pulse shrink-0"></div>
+                      <div class="space-y-1.5 flex-1">
+                        <div class="h-4 w-28 bg-surface-600 rounded animate-pulse"></div>
+                        <div class="h-3 w-20 bg-surface-600 rounded animate-pulse"></div>
                       </div>
                     </div>
-                    <button @click="disconnectGithub()" class="btn-ghost text-xs">Disconnect</button>
                   </div>
                 </template>
-                <template x-if="!user && !meLoaded">
-                  <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-xl bg-surface-600 animate-pulse"></div>
-                    <div class="space-y-2">
-                      <div class="h-4 w-32 bg-surface-600 rounded animate-pulse"></div>
-                      <div class="h-3 w-24 bg-surface-600 rounded animate-pulse"></div>
-                    </div>
-                  </div>
+                <template x-if="meLoaded && githubAccounts.length === 0">
+                  <p class="text-sm text-gray-500">No GitHub accounts connected</p>
                 </template>
-                <template x-if="!user && meLoaded && githubConnected">
-                  <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-xl bg-surface-600 animate-pulse"></div>
-                    <div class="space-y-2">
-                      <div class="h-4 w-32 bg-surface-600 rounded animate-pulse"></div>
-                      <div class="h-3 w-24 bg-surface-600 rounded animate-pulse"></div>
-                    </div>
+                <template x-if="meLoaded && githubAccounts.length > 0">
+                  <div class="space-y-1">
+                    <template x-for="acct in githubAccounts" :key="acct.id">
+                      <div @click="!acct.active && switchGithubAccount(acct.id)"
+                           class="flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors"
+                           :class="acct.active ? 'bg-accent-cyan/5 border border-accent-cyan/15' : 'hover:bg-white/[0.03] cursor-pointer border border-transparent'">
+                        <div class="flex items-center gap-3">
+                          <div class="relative">
+                            <img :src="acct.avatar_url" class="w-9 h-9 rounded-lg ring-1 ring-white/5" />
+                            <div x-show="acct.active" class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-accent-emerald ring-2 ring-surface-800"></div>
+                          </div>
+                          <div>
+                            <p class="text-sm text-white font-medium" x-text="acct.name || acct.login"></p>
+                            <p class="text-xs text-gray-500" x-text="'@' + acct.login"></p>
+                          </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <span x-show="acct.active" class="text-[10px] font-medium text-accent-emerald uppercase tracking-widest">Active</span>
+                          <button @click.stop="disconnectGithub(acct.id, acct.login)" class="text-gray-600 hover:text-accent-rose transition-colors p-1" title="Disconnect">
+                            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <line x1="18" y1="6" x2="6" y2="18"/>
+                              <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </template>
                   </div>
-                </template>
-                <template x-if="!user && meLoaded && !githubConnected">
-                  <p class="text-sm text-gray-500">No GitHub account connected</p>
                 </template>
               </div>
 
@@ -587,7 +618,7 @@ export function DashboardPage() {
 
             // Upstream
             meLoaded: false,
-            user: null,
+            githubAccounts: [],
             githubConnected: false,
             usageData: null,
             usageError: false,
@@ -766,7 +797,7 @@ export function DashboardPage() {
                 if (resp.status === 401) { this.kickToLogin(); return; }
                 const data = await resp.json();
                 this.githubConnected = data.github_connected;
-                this.user = data.user;
+                this.githubAccounts = data.accounts || [];
               } catch (e) { console.error('loadMe:', e); }
               finally { this.meLoaded = true; }
             },
@@ -815,8 +846,8 @@ export function DashboardPage() {
                   const d = await resp.json();
                   if (d.status === 'complete') {
                     this.cancelDeviceFlow();
-                    this.user = d.user;
-                    this.githubConnected = true;
+                    await this.loadMe();
+                    this.githubConnected = this.githubAccounts.length > 0;
                     await this.loadUsage();
                   } else if (d.status === 'slow_down') {
                     clearInterval(this.deviceFlow.pollTimer);
@@ -834,21 +865,42 @@ export function DashboardPage() {
               Object.assign(this.deviceFlow, { pollTimer: null, userCode: null, verificationUri: null, deviceCode: null });
             },
 
-            async disconnectGithub() {
-              if (!confirm('Disconnect GitHub account? You will need to reconnect to use Copilot API.')) return;
+            async disconnectGithub(userId, login) {
+              if (!confirm('Disconnect @' + login + '? The stored token will be deleted.')) return;
               try {
-                const resp = await fetch('/auth/github/disconnect', { method: 'POST', headers: this.authHeaders() });
+                const resp = await fetch('/auth/github/' + userId, { method: 'DELETE', headers: this.authHeaders() });
                 if (resp.status === 401) { this.kickToLogin(); return; }
                 if (resp.ok) {
-                  this.githubConnected = false;
-                  this.user = null;
-                  this.usageData = null;
-                  this.usageError = false;
-                  this.usagePercent = 0;
+                  await this.loadMe();
+                  this.githubConnected = this.githubAccounts.length > 0;
+                  if (!this.githubConnected) {
+                    this.usageData = null;
+                    this.usageError = false;
+                    this.usagePercent = 0;
+                  } else {
+                    await this.loadUsage();
+                  }
                 } else {
                   alert('Failed to disconnect GitHub account');
                 }
               } catch (e) { console.error('disconnectGithub:', e); }
+            },
+
+            async switchGithubAccount(userId) {
+              try {
+                const resp = await fetch('/auth/github/switch', {
+                  method: 'POST',
+                  headers: { ...this.authHeaders(), 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ user_id: userId }),
+                });
+                if (resp.status === 401) { this.kickToLogin(); return; }
+                if (resp.ok) {
+                  await this.loadMe();
+                  await this.loadUsage();
+                } else {
+                  alert('Failed to switch account');
+                }
+              } catch (e) { console.error('switchGithubAccount:', e); }
             },
 
             // ---- Key management ----

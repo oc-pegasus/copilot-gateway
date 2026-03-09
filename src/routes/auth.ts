@@ -1,15 +1,18 @@
-// Auth routes — ADMIN_KEY validation + GitHub Device Flow OAuth
+// Auth routes — ADMIN_KEY validation + GitHub Device Flow OAuth (multi-account)
 // Supports login with ADMIN_KEY (full dashboard access) or API key (restricted)
 // No sessions, no cookies. All auth via key in every request.
 
 import type { Context } from "hono";
 import {
   getGithubToken,
-  getGlobalGithubUser,
-  setGithubConnection,
-  clearGithubConnection,
+  listGithubAccounts,
+  addGithubAccount,
+  removeGithubAccount,
+  setActiveGithubAccount,
+  getActiveGithubAccount,
   type GitHubUser,
 } from "../lib/github.ts";
+import { clearCopilotTokenCache } from "../lib/copilot.ts";
 import { getEnv } from "../lib/env.ts";
 import { validateApiKey } from "../lib/api-keys.ts";
 import { requireAdmin } from "../lib/auth-guard.ts";
@@ -159,8 +162,9 @@ export const authGithubPoll = async (c: Context) => {
         user = (await userResp.json()) as GitHubUser;
       }
 
-      // Store globally — no session needed
-      await setGithubConnection(data.access_token, user);
+      // Store account and set as active
+      await addGithubAccount(data.access_token, user);
+      clearCopilotTokenCache();
       return c.json({ status: "complete", user });
     }
 
@@ -171,44 +175,73 @@ export const authGithubPoll = async (c: Context) => {
   }
 };
 
-/** GET /auth/me — get current GitHub connection info */
+/** GET /auth/me — get all GitHub accounts + active account info */
 export const authMe = async (c: Context) => {
   const denied = requireAdmin(c);
   if (denied) return denied;
-  const globalToken = await getGithubToken();
-  const githubConnected = !!globalToken;
-  let user = githubConnected ? await getGlobalGithubUser() : null;
 
-  // If we have a token but no cached user info, fetch it from GitHub and cache
-  if (githubConnected && !user) {
+  const accounts = await listGithubAccounts();
+  const active = await getActiveGithubAccount();
+
+  // If we have an active account but no user info cached, try to fetch it
+  if (active && !active.user.login) {
     try {
       const userResp = await fetch("https://api.github.com/user", {
         headers: {
-          authorization: `token ${globalToken}`,
+          authorization: `token ${active.token}`,
           accept: "application/json",
           "user-agent": "copilot-deno",
         },
       });
       if (userResp.ok) {
-        user = (await userResp.json()) as GitHubUser;
-        await setGithubConnection(globalToken, user);
+        active.user = (await userResp.json()) as GitHubUser;
+        await addGithubAccount(active.token, active.user);
       }
     } catch {
-      // Ignore — user just stays null
+      // Ignore — user just stays as-is
     }
   }
 
   return c.json({
     authenticated: true,
-    github_connected: githubConnected,
-    user,
+    github_connected: accounts.length > 0,
+    accounts: accounts.map((a) => ({
+      id: a.user.id,
+      login: a.user.login,
+      name: a.user.name,
+      avatar_url: a.user.avatar_url,
+      active: active?.user.id === a.user.id,
+    })),
+    // Legacy: single "user" field for the active account
+    user: active?.user ?? null,
   });
 };
 
-/** POST /auth/github/disconnect — disconnect GitHub account */
+/** DELETE /auth/github/:id — disconnect a specific GitHub account */
 export const authGithubDisconnect = async (c: Context) => {
   const denied = requireAdmin(c);
   if (denied) return denied;
-  await clearGithubConnection();
+  const userId = Number(c.req.param("id"));
+  if (!userId || isNaN(userId)) {
+    return c.json({ error: "Invalid user ID" }, 400);
+  }
+  await removeGithubAccount(userId);
+  clearCopilotTokenCache();
+  return c.json({ ok: true });
+};
+
+/** POST /auth/github/switch — switch active GitHub account */
+export const authGithubSwitch = async (c: Context) => {
+  const denied = requireAdmin(c);
+  if (denied) return denied;
+  const body = await c.req.json<{ user_id: number }>();
+  if (!body.user_id) {
+    return c.json({ error: "user_id is required" }, 400);
+  }
+  const ok = await setActiveGithubAccount(body.user_id);
+  if (!ok) {
+    return c.json({ error: "Account not found" }, 404);
+  }
+  clearCopilotTokenCache();
   return c.json({ ok: true });
 };

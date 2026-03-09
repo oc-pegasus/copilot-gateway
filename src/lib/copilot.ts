@@ -16,6 +16,14 @@ let vscodeVersionExpiresAt = 0;
 
 let cachedToken: string | null = null;
 let cachedExpiresAt = 0;
+let cachedForGithubToken: string | null = null;
+
+/** Clear the cached Copilot token (call when switching GitHub accounts on this instance) */
+export function clearCopilotTokenCache(): void {
+  cachedToken = null;
+  cachedExpiresAt = 0;
+  cachedForGithubToken = null;
+}
 
 export function copilotBaseUrl(accountType: string): string {
   return COPILOT_BASE_URLS[accountType] ?? COPILOT_BASE_URLS.individual;
@@ -68,7 +76,10 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelayMs = 
 
 export function getCopilotToken(githubToken: string): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  if (cachedToken && cachedExpiresAt > now + 60) return Promise.resolve(cachedToken);
+  // Cache hit only if same GitHub token AND not expired
+  if (cachedToken && cachedExpiresAt > now + 60 && cachedForGithubToken === githubToken) {
+    return Promise.resolve(cachedToken);
+  }
 
   return withRetry(async () => {
     const editorVer = await getEditorVersion();
@@ -92,6 +103,7 @@ export function getCopilotToken(githubToken: string): Promise<string> {
     const data = (await resp.json()) as { token: string; expires_at: number; refresh_in: number };
     cachedToken = data.token;
     cachedExpiresAt = data.expires_at;
+    cachedForGithubToken = githubToken;
     return data.token;
   });
 }
