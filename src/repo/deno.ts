@@ -1,6 +1,7 @@
 import type {
   ApiKey,
   ApiKeyRepo,
+  CacheRepo,
   GitHubAccount,
   GitHubRepo,
   Repo,
@@ -221,14 +222,33 @@ class DenoKvUsageRepo implements UsageRepo {
   }
 }
 
+class DenoKvCacheRepo implements CacheRepo {
+  constructor(private kv: Deno.Kv) {}
+
+  async get(key: string): Promise<string | null> {
+    const entry = await this.kv.get<string>(["cache", key]);
+    return entry.value;
+  }
+
+  async set(key: string, value: string): Promise<void> {
+    await this.kv.set(["cache", key], value);
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.kv.delete(["cache", key]);
+  }
+}
+
 export class DenoKvRepo implements Repo {
   apiKeys: ApiKeyRepo;
   github: GitHubRepo;
   usage: UsageRepo;
+  cache: CacheRepo;
 
   constructor(kv: Deno.Kv) {
     this.apiKeys = new DenoKvApiKeyRepo(kv);
     this.github = new DenoKvGitHubRepo(kv);
     this.usage = new DenoKvUsageRepo(kv);
+    this.cache = new DenoKvCacheRepo(kv);
   }
 }

@@ -13,15 +13,10 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
-let initialized = false;
-
 export default {
   fetch(req: Request, env: Env, ctx: ExecutionContext) {
-    if (!initialized) {
-      initEnv((n) => (env[n] as string) ?? "");
-      initRepo(new D1Repo(env.DB));
-      initialized = true;
-    }
+    initEnv((n) => (env[n] as string) ?? "");
+    initRepo(new D1Repo(env.DB));
     return app.fetch(req, env, ctx);
   },
 };

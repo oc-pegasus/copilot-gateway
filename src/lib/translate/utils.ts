@@ -18,7 +18,7 @@ export function encodeSignature(encryptedContent: string, reasoningId: string): 
 }
 
 export function decodeSignature(signature: string): { encryptedContent: string; reasoningId: string | undefined } {
-  const atIndex = signature.indexOf("@");
+  const atIndex = signature.lastIndexOf("@");
   if (atIndex === -1) return { encryptedContent: signature, reasoningId: undefined };
   return { encryptedContent: signature.slice(0, atIndex), reasoningId: signature.slice(atIndex + 1) };
 }
@@ -35,5 +35,25 @@ export function safeJsonParse(s: string): Record<string, unknown> {
       : { raw_arguments: s };
   } catch {
     return { raw_arguments: s };
+  }
+}
+
+import type { AnthropicMessagesPayload, AnthropicThinkingBlock } from "../anthropic-types.ts";
+
+/**
+ * Filter invalid thinking blocks for native Messages API.
+ * Invalid: empty thinking, "Thinking..." placeholder, signatures with "@" (Responses API origin).
+ */
+export function filterThinkingBlocks(payload: AnthropicMessagesPayload): void {
+  for (const msg of payload.messages) {
+    if (msg.role === "assistant" && Array.isArray(msg.content)) {
+      msg.content = msg.content.filter((block) => {
+        if (block.type !== "thinking") return true;
+        const tb = block as AnthropicThinkingBlock;
+        if (!tb.thinking || tb.thinking === "Thinking...") return false;
+        if (tb.signature?.includes("@")) return false;
+        return true;
+      });
+    }
   }
 }

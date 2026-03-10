@@ -5,13 +5,13 @@ import { modelSupportsEndpoint, findModel } from "../lib/models-cache.ts";
 import type {
   AnthropicMessagesPayload,
   AnthropicStreamState,
-  AnthropicThinkingBlock,
 } from "../lib/anthropic-types.ts";
 import type { ChatCompletionChunk, ChatCompletionResponse } from "../lib/openai-types.ts";
 import { translateToOpenAI, translateToAnthropic } from "../lib/translate/openai.ts";
 import { translateChunkToAnthropicEvents } from "../lib/translate/openai-stream.ts";
 import { translateAnthropicToResponses, translateResponsesToAnthropic } from "../lib/translate/responses.ts";
 import { translateResponsesStreamEvent, createResponsesStreamState } from "../lib/translate/responses-stream.ts";
+import { filterThinkingBlocks } from "../lib/translate/utils.ts";
 import type { ResponseStreamEvent, ResponsesResult } from "../lib/responses-types.ts";
 import { proxySSE } from "../lib/sse.ts";
 
@@ -43,24 +43,6 @@ function getInitiator(payload: AnthropicMessagesPayload): "user" | "agent" {
     return lastMsg.content.some((block) => block.type !== "tool_result") ? "user" : "agent";
   }
   return "user";
-}
-
-/**
- * Filter invalid thinking blocks for native Messages API.
- * Invalid: empty thinking, "Thinking..." placeholder, signatures with "@" (Responses API origin)
- */
-function filterThinkingBlocks(payload: AnthropicMessagesPayload): void {
-  for (const msg of payload.messages) {
-    if (msg.role === "assistant" && Array.isArray(msg.content)) {
-      msg.content = msg.content.filter((block) => {
-        if (block.type !== "thinking") return true;
-        const tb = block as AnthropicThinkingBlock;
-        if (!tb.thinking || tb.thinking === "Thinking...") return false;
-        if (tb.signature?.includes("@")) return false;
-        return true;
-      });
-    }
-  }
 }
 
 function isContextWindowError(text: string): boolean {
@@ -144,7 +126,7 @@ export const messages = async (c: Context) => {
       return await handleWithResponses(c, payload, githubToken, accountType, { vision, initiator });
     }
 
-    return await handleTranslated(c, payload, githubToken, accountType, { vision, initiator, rawBeta });
+    return await handleTranslated(c, payload, githubToken, accountType, { vision, initiator });
   } catch (e: unknown) {
     return c.json({ type: "error", error: { type: "api_error", message: e instanceof Error ? e.message : String(e) } }, 502);
   }
@@ -209,11 +191,9 @@ async function handleTranslated(
   payload: AnthropicMessagesPayload,
   githubToken: string,
   accountType: string,
-  opts: { vision: boolean; initiator: "user" | "agent"; rawBeta?: string },
+  opts: { vision: boolean; initiator: "user" | "agent" },
 ): Promise<Response> {
-  const anthropicBeta = filterAnthropicBeta(opts.rawBeta);
   const fetchOptions: CopilotFetchOptions = { vision: opts.vision, initiator: opts.initiator };
-  if (anthropicBeta) fetchOptions.extraHeaders = { "anthropic-beta": anthropicBeta };
 
   const openAIPayload = translateToOpenAI(payload);
   const resp = await copilotFetch("/chat/completions", { method: "POST", body: JSON.stringify(openAIPayload) }, githubToken, accountType, fetchOptions);

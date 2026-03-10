@@ -3,6 +3,7 @@
 import type {
   ApiKey,
   ApiKeyRepo,
+  CacheRepo,
   GitHubAccount,
   GitHubRepo,
   Repo,
@@ -140,14 +141,34 @@ class MemoryUsageRepo implements UsageRepo {
   }
 }
 
+class MemoryCacheRepo implements CacheRepo {
+  private store = new Map<string, string>();
+
+  get(key: string): Promise<string | null> {
+    return Promise.resolve(this.store.get(key) ?? null);
+  }
+
+  set(key: string, value: string): Promise<void> {
+    this.store.set(key, value);
+    return Promise.resolve();
+  }
+
+  delete(key: string): Promise<void> {
+    this.store.delete(key);
+    return Promise.resolve();
+  }
+}
+
 export class InMemoryRepo implements Repo {
   apiKeys: ApiKeyRepo;
   github: GitHubRepo;
   usage: UsageRepo;
+  cache: CacheRepo;
 
   constructor() {
     this.apiKeys = new MemoryApiKeyRepo();
     this.github = new MemoryGitHubRepo();
     this.usage = new MemoryUsageRepo();
+    this.cache = new MemoryCacheRepo();
   }
 }

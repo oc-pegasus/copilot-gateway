@@ -4,7 +4,7 @@ import type { Context } from "hono";
 import { githubHeaders } from "../lib/copilot.ts";
 import { getGithubCredentials } from "../lib/github.ts";
 
-export interface QuotaDetail {
+interface QuotaDetail {
   entitlement: number;
   overage_count: number;
   overage_permitted: boolean;
@@ -15,7 +15,7 @@ export interface QuotaDetail {
   unlimited: boolean;
 }
 
-export interface CopilotUsageResponse {
+interface CopilotUsageResponse {
   access_type_sku: string;
   analytics_tracking_id: string;
   assigned_date: string;

@@ -49,6 +49,6 @@ export const chatCompletions = async (c: Context) => {
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    return c.json({ error: msg }, 502);
+    return c.json({ error: { message: msg, type: "api_error" } }, 502);
   }
 };

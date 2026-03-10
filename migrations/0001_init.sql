@@ -9,7 +9,6 @@ CREATE TABLE api_keys (
 CREATE TABLE github_accounts (
   user_id INTEGER PRIMARY KEY,
   token TEXT NOT NULL,
-  account_type TEXT NOT NULL DEFAULT 'individual',
   login TEXT NOT NULL,
   name TEXT,
   avatar_url TEXT

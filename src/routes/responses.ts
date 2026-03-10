@@ -8,6 +8,7 @@ import {
   translateResponsesToAnthropicPayload,
   translateAnthropicToResponsesResult,
 } from "../lib/translate/responses.ts";
+import { filterThinkingBlocks } from "../lib/translate/utils.ts";
 import {
   createAnthropicToResponsesStreamState,
   translateAnthropicEventToResponsesEvents,
@@ -163,6 +164,7 @@ async function handleViaMessages(
   fixApplyPatchTools(payload);
 
   const anthropicPayload = translateResponsesToAnthropicPayload(payload);
+  filterThinkingBlocks(anthropicPayload);
   const fetchOptions: CopilotFetchOptions = {
     vision: hasVision(payload),
     initiator: getInitiator(payload),
@@ -193,7 +195,7 @@ async function handleViaMessages(
   const responseId = `resp_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
   const state = createAnthropicToResponsesStreamState(responseId, anthropicPayload.model);
 
-  return proxySSE(c, resp.body!, (eventName, data) => {
+  return proxySSE(c, resp.body, (eventName, data) => {
     if (state.completed) return null;
     const trimmed = data.trim();
     if (!trimmed) return null;

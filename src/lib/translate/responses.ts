@@ -73,8 +73,8 @@ export function translateAnthropicToResponses(
   };
 }
 
-function translateMessage(msg: AnthropicMessage, model: string): ResponseInputItem[] {
-  return msg.role === "user" ? translateUserMessage(msg) : translateAssistantMessage(msg, model);
+function translateMessage(msg: AnthropicMessage, _model: string): ResponseInputItem[] {
+  return msg.role === "user" ? translateUserMessage(msg) : translateAssistantMessage(msg);
 }
 
 function translateUserMessage(msg: AnthropicUserMessage): ResponseInputItem[] {
@@ -105,7 +105,7 @@ function translateUserMessage(msg: AnthropicUserMessage): ResponseInputItem[] {
   return items;
 }
 
-function translateAssistantMessage(msg: AnthropicAssistantMessage, _model: string): ResponseInputItem[] {
+function translateAssistantMessage(msg: AnthropicAssistantMessage): ResponseInputItem[] {
   if (typeof msg.content === "string") {
     return [{ type: "message", role: "assistant", content: msg.content }];
   }
@@ -466,13 +466,13 @@ export function translateAnthropicToResponsesResult(response: AnthropicResponse)
   for (const block of response.content) {
     switch (block.type) {
       case "thinking": {
-        const parts = (block.signature ?? "").split("@");
+        const { encryptedContent, reasoningId } = decodeSignature(block.signature ?? "");
         const summaryText = block.thinking === THINKING_PLACEHOLDER ? "" : block.thinking;
         output.push({
           type: "reasoning",
-          id: parts[1] ?? `reasoning_${output.length}`,
+          id: reasoningId ?? `reasoning_${output.length}`,
           summary: summaryText ? [{ type: "summary_text", text: summaryText }] : [],
-          encrypted_content: parts[0] || undefined,
+          encrypted_content: encryptedContent || undefined,
         } as ResponseOutputReasoning);
         break;
       }

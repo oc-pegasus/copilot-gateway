@@ -1,3 +1,5 @@
+import { getRepo } from "../repo/mod.ts";
+
 const COPILOT_BASE_URLS: Record<string, string> = {
   individual: "https://api.githubcopilot.com",
   business: "https://api.business.githubcopilot.com",
@@ -14,18 +16,35 @@ const VSCODE_VERSION_TTL_MS = 24 * 60 * 60 * 1000; // 1 day
 let cachedVSCodeVersion: string | null = null;
 let vscodeVersionExpiresAt = 0;
 
+// Two-level Copilot token cache: in-process (60s) + KV (cross-datacenter).
+// In-process avoids KV reads on every request. KV avoids HTTP fetches on cold starts.
+const COPILOT_TOKEN_KV_KEY = "copilot_token";
+const IN_PROCESS_TTL_MS = 60_000;
 let cachedToken: string | null = null;
 let cachedExpiresAt = 0;
 let cachedForGithubToken: string | null = null;
+let cachedTokenAt = 0; // when the in-process cache was last populated
 
-/** Clear the cached Copilot token (call when switching GitHub accounts on this instance) */
-export function clearCopilotTokenCache(): void {
+interface CopilotTokenCacheEntry {
+  token: string;
+  expiresAt: number;
+  forGithubToken: string;
+}
+
+/** Clear the cached Copilot token from both in-process and KV storage */
+export async function clearCopilotTokenCache(): Promise<void> {
   cachedToken = null;
   cachedExpiresAt = 0;
   cachedForGithubToken = null;
+  cachedTokenAt = 0;
+  try {
+    await getRepo().cache.delete(COPILOT_TOKEN_KV_KEY);
+  } catch {
+    // Ignore — KV may not be available during initialization
+  }
 }
 
-export function copilotBaseUrl(accountType: string): string {
+function copilotBaseUrl(accountType: string): string {
   return COPILOT_BASE_URLS[accountType] ?? COPILOT_BASE_URLS.individual;
 }
 
@@ -56,15 +75,13 @@ async function getEditorVersion(): Promise<string> {
   return `vscode/${await fetchVSCodeVersion()}`;
 }
 
-export function editorVersion(): string {
-  return cachedVSCodeVersion ? `vscode/${cachedVSCodeVersion}` : FALLBACK_EDITOR_VERSION;
-}
-
 async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelayMs = 1000): Promise<T> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
     } catch (e) {
+      // Don't retry client errors (4xx) — they won't change on retry
+      if (e instanceof Error && /failed: 4\d{2} /.test(e.message)) throw e;
       if (attempt >= maxRetries) throw e;
       const delay = baseDelayMs * Math.pow(2, attempt);
       console.warn(`Retry ${attempt + 1}/${maxRetries} after ${delay}ms: ${e instanceof Error ? e.message : String(e)}`);
@@ -74,13 +91,37 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelayMs = 
   throw new Error("Unreachable");
 }
 
-export function getCopilotToken(githubToken: string): Promise<string> {
+function isTokenValid(token: string | null, expiresAt: number, forGithubToken: string | null, githubToken: string): boolean {
+  if (!token || !forGithubToken) return false;
   const now = Math.floor(Date.now() / 1000);
-  // Cache hit only if same GitHub token AND not expired
-  if (cachedToken && cachedExpiresAt > now + 60 && cachedForGithubToken === githubToken) {
-    return Promise.resolve(cachedToken);
+  return forGithubToken === githubToken && expiresAt > now + 60;
+}
+
+async function getCopilotToken(githubToken: string): Promise<string> {
+  // Level 1: in-process cache (avoids KV read on hot path)
+  const now = Date.now();
+  if (isTokenValid(cachedToken, cachedExpiresAt, cachedForGithubToken, githubToken) && now - cachedTokenAt < IN_PROCESS_TTL_MS) {
+    return cachedToken!;
   }
 
+  // Level 2: KV cache (cross-datacenter, survives isolate restarts)
+  try {
+    const raw = await getRepo().cache.get(COPILOT_TOKEN_KV_KEY);
+    if (raw) {
+      const entry = JSON.parse(raw) as CopilotTokenCacheEntry;
+      if (isTokenValid(entry.token, entry.expiresAt, entry.forGithubToken, githubToken)) {
+        cachedToken = entry.token;
+        cachedExpiresAt = entry.expiresAt;
+        cachedForGithubToken = entry.forGithubToken;
+        cachedTokenAt = now;
+        return entry.token;
+      }
+    }
+  } catch {
+    // KV read failure is non-fatal — fall through to fetch
+  }
+
+  // Level 3: fetch from GitHub API
   return withRetry(async () => {
     const editorVer = await getEditorVersion();
     const resp = await fetch("https://api.github.com/copilot_internal/v2/token", {
@@ -101,9 +142,16 @@ export function getCopilotToken(githubToken: string): Promise<string> {
     }
 
     const data = (await resp.json()) as { token: string; expires_at: number; refresh_in: number };
+
+    // Populate both cache levels
     cachedToken = data.token;
     cachedExpiresAt = data.expires_at;
     cachedForGithubToken = githubToken;
+    cachedTokenAt = Date.now();
+
+    const entry: CopilotTokenCacheEntry = { token: data.token, expiresAt: data.expires_at, forGithubToken: githubToken };
+    getRepo().cache.set(COPILOT_TOKEN_KV_KEY, JSON.stringify(entry)).catch(() => {});
+
     return data.token;
   });
 }

@@ -61,6 +61,17 @@ function handleReasoningDelta(
       state.contentBlockOpen = true;
       state.thinkingBlockOpen = true;
       state.thinkingHasContent = true;
+
+      // Flush any pending opaque data into the newly opened thinking block
+      if (state.pendingReasoningOpaque) {
+        events.push({
+          type: "content_block_delta",
+          index: state.contentBlockIndex,
+          delta: { type: "signature_delta", signature: state.pendingReasoningOpaque },
+        });
+        state.thinkingSignatureSent = true;
+        state.pendingReasoningOpaque = undefined;
+      }
     }
     events.push({
       type: "content_block_delta",

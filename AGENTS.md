@@ -35,7 +35,7 @@ DenoKvRepo (src/repo/deno.ts)  |  D1Repo (src/repo/d1.ts)
 - `src/lib/env.ts` — `initEnv(fn)` / `getEnv(name)` — pluggable env access, initialized by entry file
 
 **Repository layer:**
-- `src/repo/types.ts` — `Repo`, `ApiKeyRepo`, `GitHubRepo`, `UsageRepo` interfaces
+- `src/repo/types.ts` — `Repo`, `ApiKeyRepo`, `GitHubRepo`, `UsageRepo`, `CacheRepo` interfaces
 - `src/repo/mod.ts` — `initRepo(repo)` / `getRepo()` singleton
 - `src/repo/deno.ts` — `DenoKvRepo` using Deno KV
 - `src/repo/d1.ts` — `D1Repo` using Cloudflare D1 (SQLite)
@@ -59,7 +59,8 @@ There are two roles: **admin** (logs in with `ADMIN_KEY`) and **API key user** (
 **Rules:**
 - `GET /api/keys` returns all keys for admin, only the caller's own key for API key user. Full key values in both cases.
 - All mutating key operations (`POST /api/keys`, `DELETE /api/keys/:id`, `POST /api/keys/:id/rotate`, `PATCH /api/keys/:id`) are admin-only.
-- `GET /api/token-usage` returns all keys' usage for admin, only the caller's key usage for API key user.
+- `GET /api/token-usage` returns all keys' usage for all authenticated users. **IMPORTANT**: This is intentional — usage data is public to all authenticated users.
+- `GET /api/keys` returns all keys for admin, only the caller's own key (with full key value) for API key user. **IMPORTANT**: API key users can only see their own key.
 - GitHub account management (`/auth/github/*`, `/auth/me`), Copilot quota, export/import are admin-only.
 
 ### API Routes
@@ -397,3 +398,5 @@ D1 schema migrations are in `migrations/`. Configuration is in `wrangler.jsonc`.
 - **Commit convention**: Follow [Conventional Commits](https://www.conventionalcommits.org/) (e.g. `feat:`, `fix:`, `refactor:`, `chore:`). Keep messages concise.
 - **Keep AGENTS.md up to date**: Any changes to file structure, architecture, or key design decisions must be promptly reflected in this file.
 - **No legacy residue**: When replacing any part of the design, thoroughly search and remove all old code, env vars, fallbacks, and API surface. Every change should leave the codebase as clean as a greenfield project — no compatibility shims, no dead fallbacks, no "just in case" code paths. The only thing that may require migration is database data.
+- **Reference implementation review for data plane bugs**: When a data plane bug is discovered, check how [ericc-ch/copilot-api](https://github.com/ericc-ch/copilot-api) and its forks handle the same scenario. Search their issues and PRs for relevant discussions. Document findings before fixing.
+- **Edge computing cache coherence**: This is an edge computing project deployed across multiple datacenters. Any introduction of global variables or in-process state **must** consider cache coherence and consistency. In-process caches are per-isolate and may diverge across datacenters — always pair them with a cross-datacenter backing store (KV/D1) and a short TTL. Non-cache mutable global state is prohibited. When adding any new global variable, document its caching strategy and invalidation mechanism.

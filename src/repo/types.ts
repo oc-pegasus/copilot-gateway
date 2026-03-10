@@ -61,8 +61,15 @@ export interface UsageRepo {
   deleteAll(): Promise<void>;
 }
 
+export interface CacheRepo {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
 export interface Repo {
   apiKeys: ApiKeyRepo;
   github: GitHubRepo;
   usage: UsageRepo;
+  cache: CacheRepo;
 }

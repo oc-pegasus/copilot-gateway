@@ -159,7 +159,7 @@ export const authGithubPoll = async (c: Context) => {
       // Store account and set as active
       const accountType = await detectAccountType(data.access_token);
       await addGithubAccount(data.access_token, user, accountType);
-      clearCopilotTokenCache();
+      await clearCopilotTokenCache();
       return c.json({ status: "complete", user });
     }
 
@@ -205,8 +205,6 @@ export const authMe = async (c: Context) => {
       account_type: a.accountType,
       active: active?.user.id === a.user.id,
     })),
-    // Legacy: single "user" field for the active account
-    user: active?.user ?? null,
   });
 };
 
@@ -217,7 +215,7 @@ export const authGithubDisconnect = async (c: Context) => {
     return c.json({ error: "Invalid user ID" }, 400);
   }
   await removeGithubAccount(userId);
-  clearCopilotTokenCache();
+  await clearCopilotTokenCache();
   return c.json({ ok: true });
 };
 
@@ -231,7 +229,7 @@ export const authGithubSwitch = async (c: Context) => {
   if (!ok) {
     return c.json({ error: "Account not found" }, 404);
   }
-  clearCopilotTokenCache();
+  await clearCopilotTokenCache();
   return c.json({ ok: true });
 };
 

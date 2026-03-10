@@ -314,14 +314,17 @@ function handleError(
   event: { message: string },
   state: ResponsesStreamState,
 ): AnthropicStreamEventData[] {
+  const events: AnthropicStreamEventData[] = [];
+  closeAllBlocks(state, events);
   state.messageCompleted = true;
-  return [{
+  events.push({
     type: "error",
     error: {
       type: "api_error",
       message: typeof event.message === "string" ? event.message : "An unexpected error occurred during streaming.",
     },
-  }];
+  });
+  return events;
 }
 
 // ── Block management ──

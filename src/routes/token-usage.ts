@@ -1,4 +1,8 @@
 // GET /api/token-usage — query per-key token usage records
+//
+// IMPORTANT DESIGN DECISION: Usage data is intentionally readable by ALL authenticated
+// users (both admin and API key users), without scoping. Any authenticated user can view
+// usage records for all keys. API keys themselves are only readable by their owner.
 
 import type { Context } from "hono";
 import { queryUsage } from "../lib/usage-tracker.ts";

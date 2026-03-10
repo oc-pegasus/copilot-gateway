@@ -20,7 +20,7 @@ import { decodeSignature } from "./utils.ts";
 
 type OutputBlockInfo =
   | { type: "thinking"; outputIndex: number; itemId: string; thinkingText: string; signature: string }
-  | { type: "text"; outputIndex: number; itemId: string; contentIndex: number }
+  | { type: "text"; outputIndex: number; itemId: string; contentIndex: number; blockText: string }
   | { type: "tool_use"; outputIndex: number; itemId: string; toolCallId: string; toolName: string; toolArguments: string };
 
 export interface AnthropicToResponsesStreamState {
@@ -113,7 +113,7 @@ function handleContentBlockStart(event: AnthropicContentBlockStartEvent, state: 
 
   if (contentBlock.type === "text") {
     const itemId = `msg_${outputIdx}`;
-    state.blockMap.set(index, { type: "text", outputIndex: outputIdx, itemId, contentIndex: 0 });
+    state.blockMap.set(index, { type: "text", outputIndex: outputIdx, itemId, contentIndex: 0, blockText: "" });
     const item: ResponseOutputMessage = { type: "message", role: "assistant", content: [{ type: "output_text", text: "" }] };
     return seq(state, [
       { type: "response.output_item.added", output_index: outputIdx, item },
@@ -155,6 +155,7 @@ function handleContentBlockDelta(event: AnthropicContentBlockDeltaEvent, state: 
   }
 
   if (delta.type === "text_delta" && info.type === "text") {
+    info.blockText += delta.text;
     state.accumulatedText += delta.text;
     return seq(state, [{
       type: "response.output_text.delta",
@@ -202,8 +203,8 @@ function handleContentBlockStop(event: AnthropicContentBlockStopEvent, state: An
     state.completedItems.push(item);
     events.push({ type: "response.output_item.done", output_index: info.outputIndex, item });
   } else if (info.type === "text") {
-    events.push({ type: "response.output_text.done", item_id: info.itemId, output_index: info.outputIndex, content_index: info.contentIndex, text: state.accumulatedText });
-    const part = { type: "output_text" as const, text: state.accumulatedText };
+    events.push({ type: "response.output_text.done", item_id: info.itemId, output_index: info.outputIndex, content_index: info.contentIndex, text: info.blockText });
+    const part = { type: "output_text" as const, text: info.blockText };
     events.push({ type: "response.content_part.done", item_id: info.itemId, output_index: info.outputIndex, content_index: info.contentIndex, part });
     const item: ResponseOutputMessage = { type: "message", role: "assistant", content: [part] };
     state.completedItems.push(item);

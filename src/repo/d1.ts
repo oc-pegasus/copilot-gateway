@@ -1,6 +1,7 @@
 import type {
   ApiKey,
   ApiKeyRepo,
+  CacheRepo,
   GitHubAccount,
   GitHubRepo,
   Repo,
@@ -228,14 +229,36 @@ class D1UsageRepo implements UsageRepo {
   }
 }
 
+class D1CacheRepo implements CacheRepo {
+  constructor(private db: D1Database) {}
+
+  async get(key: string): Promise<string | null> {
+    const row = await this.db.prepare("SELECT value FROM config WHERE key = ?").bind(key).first<{ value: string }>();
+    return row?.value ?? null;
+  }
+
+  async set(key: string, value: string): Promise<void> {
+    await this.db
+      .prepare("INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value")
+      .bind(key, value)
+      .run();
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.db.prepare("DELETE FROM config WHERE key = ?").bind(key).run();
+  }
+}
+
 export class D1Repo implements Repo {
   apiKeys: ApiKeyRepo;
   github: GitHubRepo;
   usage: UsageRepo;
+  cache: CacheRepo;
 
   constructor(db: D1Database) {
     this.apiKeys = new D1ApiKeyRepo(db);
     this.github = new D1GitHubRepo(db);
     this.usage = new D1UsageRepo(db);
+    this.cache = new D1CacheRepo(db);
   }
 }

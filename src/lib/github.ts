@@ -1,7 +1,5 @@
 import { getRepo } from "../repo/mod.ts";
 
-export type { GitHubAccount } from "../repo/types.ts";
-
 export interface GitHubUser {
   login: string;
   avatar_url: string;
@@ -9,7 +7,7 @@ export interface GitHubUser {
   id: number;
 }
 
-export interface GithubCredentials {
+interface GithubCredentials {
   token: string;
   accountType: string;
 }
