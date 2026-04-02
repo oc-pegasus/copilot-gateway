@@ -433,14 +433,27 @@ Only specific beta values are forwarded: `interleaved-thinking-2025-05-14`,
 are stripped. `interleaved-thinking` is auto-added for budget-based thinking and
 excluded for adaptive thinking.
 
-### 6. `service_tier` removal
+### 6. `cache_control.scope` stripping
+
+**File**: `src/routes/messages.ts` · **Ref**:
+[caozhiyuan/copilot-api#143](https://github.com/caozhiyuan/copilot-api/issues/143),
+[caozhiyuan/copilot-api#144](https://github.com/caozhiyuan/copilot-api/pull/144)
+
+Claude Code (v2.1.24+) adds a `scope` field to `cache_control` objects as part
+of the `prompt-caching-scope-2026-01-05` beta. Copilot API doesn't support this
+field and rejects with `cache_control.ephemeral.scope: Extra inputs are not
+permitted`. We strip only the `scope` field from `cache_control` on system
+blocks and message content blocks, preserving `{ type: "ephemeral" }` so
+caching still works.
+
+### 7. `service_tier` removal
 
 **File**: `src/routes/messages.ts`
 
 The `service_tier` field is removed from Anthropic payloads before forwarding —
 Copilot does not support it.
 
-### 7. Native Messages stream `[DONE]` filtering
+### 8. Native Messages stream `[DONE]` filtering
 
 **File**: `src/routes/messages.ts`
 
@@ -448,7 +461,7 @@ Some Copilot native `/v1/messages` streams include an OpenAI-style trailing
 `data: [DONE]` sentinel. Anthropic-compatible clients do not expect this, so
 the proxy strips it and leaves the rest of the Anthropic SSE stream unchanged.
 
-### 8. Infinite whitespace in function call arguments
+### 9. Infinite whitespace in function call arguments
 
 **File**: `src/lib/translate/utils.ts` · **Ref**:
 [caozhiyuan/copilot-api `MAX_CONSECUTIVE_FUNCTION_CALL_WHITESPACE`](https://github.com/caozhiyuan/copilot-api/blob/all/src/routes/messages/responses-stream-translation.ts)
@@ -458,7 +471,7 @@ newlines/whitespace until `max_tokens`. We track consecutive whitespace
 characters (`\r`, `\n`, `\t`) and abort the stream with an error if >20
 consecutive are detected. Spaces are excluded from the count.
 
-### 9. Stream ID inconsistency in Responses API
+### 10. Stream ID inconsistency in Responses API
 
 **File**: `src/routes/responses.ts` · **Ref**:
 [caozhiyuan/copilot-api `stream-id-sync.ts`](https://github.com/caozhiyuan/copilot-api/blob/all/src/routes/responses/stream-id-sync.ts)
@@ -468,7 +481,7 @@ and `response.output_item.done` events for the same output item. This breaks
 `@ai-sdk/openai` (used by OpenCode). We track the original ID from `.added` and
 force it onto `.done`.
 
-### 10. Chat Completions split choices for Claude models
+### 11. Chat Completions split choices for Claude models
 
 **File**: `src/routes/chat-completions.ts`
 

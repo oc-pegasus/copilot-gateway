@@ -106,6 +106,25 @@ function stripReservedKeywords(payload: AnthropicMessagesPayload): void {
   }
 }
 
+/** Strip unsupported `scope` from cache_control — Copilot API rejects it */
+function stripCacheControlScope(payload: AnthropicMessagesPayload): void {
+  const strip = (block: Record<string, unknown>) => {
+    const cc = block.cache_control;
+    if (cc && typeof cc === "object") {
+      const { scope: _, ...rest } = cc as Record<string, unknown>;
+      block.cache_control = Object.keys(rest).length > 0 ? rest : undefined;
+    }
+  };
+  if (Array.isArray(payload.system)) {
+    for (const block of payload.system) strip(block as Record<string, unknown>);
+  }
+  for (const msg of payload.messages) {
+    if (Array.isArray(msg.content)) {
+      for (const block of msg.content) strip(block as Record<string, unknown>);
+    }
+  }
+}
+
 /** Anthropic-compatible error that triggers compact in Claude Code */
 function contextWindowErrorResponse(c: Context) {
   return c.json({
@@ -133,6 +152,7 @@ export const messages = async (c: Context) => {
     }
 
     stripReservedKeywords(payload);
+    stripCacheControlScope(payload);
 
     const vision = hasVision(payload);
     const initiator = getInitiator(payload);
