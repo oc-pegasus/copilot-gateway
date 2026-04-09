@@ -3,7 +3,14 @@
   "name": "copilot",
   "main": "entry-cloudflare.ts",
   "compatibility_date": "2025-01-01",
+  "workers_dev": true,
   "account_id": "7d7db4dda3319d23e2cedcf70ea2aa45",
+  "routes": [
+    {
+      "pattern": "copilot.codetrek.work/*",
+      "zone_name": "codetrek.work"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
