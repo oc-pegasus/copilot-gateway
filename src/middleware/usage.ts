@@ -149,7 +149,7 @@ interface UsageInfo {
 function extractUsageFromJson(json: any): UsageInfo | null {
   // Anthropic Messages: { usage: { input_tokens, output_tokens } }
   if (json?.usage?.input_tokens != null) {
-    return { input: json.usage.input_tokens, output: json.usage.output_tokens ?? 0 };
+    return { input: json.usage.input_tokens + (json.usage.cache_read_input_tokens ?? 0), output: json.usage.output_tokens ?? 0 };
   }
   // OpenAI Chat Completions: { usage: { prompt_tokens, completion_tokens } }
   if (json?.usage?.prompt_tokens != null) {
@@ -162,7 +162,7 @@ function extractUsageFromJson(json: any): UsageInfo | null {
 function extractUsageFromStreamEvent(parsed: any, add: (input: number, output: number) => void): void {
   // Anthropic message_start: { message: { usage: { input_tokens } } }
   if (parsed.type === "message_start" && parsed.message?.usage?.input_tokens != null) {
-    add(parsed.message.usage.input_tokens, 0);
+    add(parsed.message.usage.input_tokens + (parsed.message.usage.cache_read_input_tokens ?? 0), 0);
   }
   // Anthropic message_delta: { usage: { output_tokens } }
   if (parsed.type === "message_delta" && parsed.usage?.output_tokens != null) {
