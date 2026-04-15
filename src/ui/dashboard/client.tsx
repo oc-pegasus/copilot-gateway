@@ -72,7 +72,7 @@ export function dashboardAssets() {
       keysLoading: false,
       now: Date.now(),
       newKeyName: '',
-      newKeyBackend: null,
+      newKeyBackend: '',
       selectedKeyId: null,
       keyCreating: false,
       keyDeleting: null,
@@ -458,7 +458,7 @@ export function dashboardAssets() {
             this.keyCreating = true;
             try {
               const payload = { name };
-              if (this.newKeyBackend !== null && this.newKeyBackend !== '') {
+              if (this.newKeyBackend !== '') {
                 payload.github_account_id = Number(this.newKeyBackend);
               }
               const resp = await fetch('/api/keys', {
@@ -474,7 +474,7 @@ export function dashboardAssets() {
                 const created = await resp.json();
                 this.selectedKeyId = created.id;
                 this.newKeyName = '';
-                this.newKeyBackend = null;
+                this.newKeyBackend = '';
                 await this.loadKeys();
               } else {
                 alert((await resp.json()).error || 'Failed to create key');

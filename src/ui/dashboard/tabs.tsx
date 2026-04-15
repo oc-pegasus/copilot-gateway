@@ -502,7 +502,7 @@ export function renderKeysTab() {
                 x-model="newKeyBackend"
                 class="text-xs bg-surface-800 text-gray-300 border border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-accent-cyan/50 cursor-pointer"
               >
-                <option :value="null">Default</option>
+                <option value="">Default</option>
                 <template x-for="acct in githubAccounts" :key="acct.id">
                   <option :value="acct.id" x-text="'@' + acct.login"></option>
                 </template>
