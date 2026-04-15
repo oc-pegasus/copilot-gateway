@@ -119,7 +119,8 @@ export const responses = async (c: Context) => {
   try {
     const payload = await c.req.json<ResponsesPayload>();
     c.set("model", payload.model ?? "unknown");
-    const { token: githubToken, accountType } = await getGithubCredentials();
+    const githubAccountId = c.get("githubAccountId") as number | undefined;
+    const { token: githubToken, accountType } = await getGithubCredentials(githubAccountId);
     const model = payload.model;
 
     const supportsResponses = await modelSupportsEndpoint(

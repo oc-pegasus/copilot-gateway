@@ -32,34 +32,49 @@ class D1ApiKeyRepo implements ApiKeyRepo {
 
   async list(): Promise<ApiKey[]> {
     const { results } = await this.db
-      .prepare("SELECT id, name, key, created_at, last_used_at FROM api_keys ORDER BY created_at")
-      .all<{ id: string; name: string; key: string; created_at: string; last_used_at: string | null }>();
+      .prepare("SELECT id, name, key, created_at, last_used_at, github_account_id FROM api_keys ORDER BY created_at")
+      .all<ApiKeyRow>();
     return results.map(toApiKey);
   }
 
   async findByRawKey(rawKey: string): Promise<ApiKey | null> {
     const row = await this.db
-      .prepare("SELECT id, name, key, created_at, last_used_at FROM api_keys WHERE key = ?")
+      .prepare("SELECT id, name, key, created_at, last_used_at, github_account_id FROM api_keys WHERE key = ?")
       .bind(rawKey)
-      .first<{ id: string; name: string; key: string; created_at: string; last_used_at: string | null }>();
+      .first<ApiKeyRow>();
     return row ? toApiKey(row) : null;
   }
 
   async getById(id: string): Promise<ApiKey | null> {
     const row = await this.db
-      .prepare("SELECT id, name, key, created_at, last_used_at FROM api_keys WHERE id = ?")
+      .prepare("SELECT id, name, key, created_at, last_used_at, github_account_id FROM api_keys WHERE id = ?")
       .bind(id)
-      .first<{ id: string; name: string; key: string; created_at: string; last_used_at: string | null }>();
+      .first<ApiKeyRow>();
     return row ? toApiKey(row) : null;
   }
 
   async save(key: ApiKey): Promise<void> {
     await this.db
       .prepare(
-        `INSERT INTO api_keys (id, name, key, created_at, last_used_at) VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (id) DO UPDATE SET name = excluded.name, key = excluded.key, last_used_at = excluded.last_used_at`,
+        `INSERT INTO api_keys (id, name, key, created_at, last_used_at, github_account_id) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET name = excluded.name, key = excluded.key, last_used_at = excluded.last_used_at, github_account_id = excluded.github_account_id`,
       )
-      .bind(key.id, key.name, key.key, key.createdAt, key.lastUsedAt ?? null)
+      .bind(key.id, key.name, key.key, key.createdAt, key.lastUsedAt ?? null, key.githubAccountId ?? null)
+      .run();
+  }
+
+  async updateGithubAccountId(id: string, githubAccountId: number | null): Promise<boolean> {
+    const result = await this.db
+      .prepare("UPDATE api_keys SET github_account_id = ? WHERE id = ?")
+      .bind(githubAccountId, id)
+      .run();
+    return (result.meta.changes as number ?? 0) > 0;
+  }
+
+  async clearGithubAccountId(accountId: number): Promise<void> {
+    await this.db
+      .prepare("UPDATE api_keys SET github_account_id = NULL WHERE github_account_id = ?")
+      .bind(accountId)
       .run();
   }
 
@@ -73,13 +88,23 @@ class D1ApiKeyRepo implements ApiKeyRepo {
   }
 }
 
-function toApiKey(row: { id: string; name: string; key: string; created_at: string; last_used_at: string | null }): ApiKey {
+interface ApiKeyRow {
+  id: string;
+  name: string;
+  key: string;
+  created_at: string;
+  last_used_at: string | null;
+  github_account_id: number | null;
+}
+
+function toApiKey(row: ApiKeyRow): ApiKey {
   return {
     id: row.id,
     name: row.name,
     key: row.key,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at ?? undefined,
+    githubAccountId: row.github_account_id ?? undefined,
   };
 }
 

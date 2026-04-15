@@ -34,7 +34,8 @@ interface CopilotUsageResponse {
 
 export const copilotQuota = async (c: Context) => {
   try {
-    const { token: githubToken } = await getGithubCredentials();
+    const githubAccountId = c.get("githubAccountId") as number | undefined;
+    const { token: githubToken } = await getGithubCredentials(githubAccountId);
 
     const resp = await fetch(
       "https://api.github.com/copilot_internal/user",

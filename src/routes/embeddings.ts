@@ -12,7 +12,8 @@ import {
 export const embeddings = async (c: Context) => {
   try {
     const body = await c.req.text();
-    const { token: githubToken, accountType } = await getGithubCredentials();
+    const githubAccountId = c.get("githubAccountId") as number | undefined;
+    const { token: githubToken, accountType } = await getGithubCredentials(githubAccountId);
     const resp = await copilotFetch(
       "/embeddings",
       { method: "POST", body },

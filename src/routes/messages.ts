@@ -154,7 +154,8 @@ export const messages = async (c: Context) => {
     const payload = await c.req.json<AnthropicMessagesPayload>();
     c.set("model", payload.model ?? "unknown");
 
-    const { token: githubToken, accountType } = await getGithubCredentials();
+    const githubAccountId = c.get("githubAccountId") as number | undefined;
+    const { token: githubToken, accountType } = await getGithubCredentials(githubAccountId);
 
     // Strip web_search tools — Copilot doesn't support them
     if (payload.tools) {

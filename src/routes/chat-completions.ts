@@ -146,7 +146,8 @@ export const chatCompletions = async (c: Context) => {
   try {
     const body = await c.req.json<ChatCompletionsPayload>();
     c.set("model", body.model ?? "unknown");
-    const { token: githubToken, accountType } = await getGithubCredentials();
+    const githubAccountId = c.get("githubAccountId") as number | undefined;
+    const { token: githubToken, accountType } = await getGithubCredentials(githubAccountId);
 
     const route = await decideRoute(body, githubToken, accountType);
 

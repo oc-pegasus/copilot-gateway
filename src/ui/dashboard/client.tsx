@@ -72,6 +72,7 @@ export function dashboardAssets() {
       keysLoading: false,
       now: Date.now(),
       newKeyName: '',
+      newKeyBackend: null,
       selectedKeyId: null,
       keyCreating: false,
       keyDeleting: null,
@@ -193,6 +194,7 @@ export function dashboardAssets() {
             this.loadUsage();
           } else if (this.tab === 'keys') {
             this.loadKeys();
+            if (this.isAdmin) this.loadMe();
           } else if (this.tab === 'usage') {
             this.loadTokenUsage();
           }
@@ -233,6 +235,7 @@ export function dashboardAssets() {
             }
           } else if (t === 'keys') {
             await this.loadKeys();
+            if (this.isAdmin && !this.meLoaded) await this.loadMe();
           }
         },
 
@@ -454,10 +457,14 @@ export function dashboardAssets() {
             if (!name) return;
             this.keyCreating = true;
             try {
+              const payload = { name };
+              if (this.newKeyBackend !== null && this.newKeyBackend !== '') {
+                payload.github_account_id = Number(this.newKeyBackend);
+              }
               const resp = await fetch('/api/keys', {
                 method: 'POST',
                 headers: { ...this.authHeaders(), 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name }),
+                body: JSON.stringify(payload),
               });
               if (resp.status === 401) {
                 this.logout();
@@ -467,6 +474,7 @@ export function dashboardAssets() {
                 const created = await resp.json();
                 this.selectedKeyId = created.id;
                 this.newKeyName = '';
+                this.newKeyBackend = null;
                 await this.loadKeys();
               } else {
                 alert((await resp.json()).error || 'Failed to create key');
@@ -518,6 +526,33 @@ export function dashboardAssets() {
               console.error('rotateKey:', e);
             } finally {
               this.keyRotating = null;
+            }
+          },
+
+          backendLabel(k) {
+            if (!k.github_account_id) return 'Default';
+            const acct = this.githubAccounts.find((a) => a.id === k.github_account_id);
+            return acct ? '@' + acct.login : 'Account #' + k.github_account_id;
+          },
+
+          async updateKeyBackend(id, githubAccountId) {
+            try {
+              const resp = await fetch('/api/keys/' + id, {
+                method: 'PATCH',
+                headers: { ...this.authHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ github_account_id: githubAccountId }),
+              });
+              if (resp.status === 401) {
+                this.logout();
+                return;
+              }
+              if (resp.ok) {
+                await this.loadKeys();
+              } else {
+                alert((await resp.json()).error || 'Failed to update backend');
+              }
+            } catch (e) {
+              console.error('updateKeyBackend:', e);
             }
           },
 

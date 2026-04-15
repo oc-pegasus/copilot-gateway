@@ -32,6 +32,9 @@ export const authMiddleware = async (c: Context, next: Next) => {
     c.set("authKey", key);
     c.set("isAdmin", false);
     c.set("apiKeyId", result.id);
+    if (result.githubAccountId != null) {
+      c.set("githubAccountId", result.githubAccountId);
+    }
     return next();
   }
 

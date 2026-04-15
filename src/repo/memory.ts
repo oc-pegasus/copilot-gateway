@@ -34,6 +34,22 @@ class MemoryApiKeyRepo implements ApiKeyRepo {
     return Promise.resolve();
   }
 
+  updateGithubAccountId(id: string, githubAccountId: number | null): Promise<boolean> {
+    const key = this.store.get(id);
+    if (!key) return Promise.resolve(false);
+    key.githubAccountId = githubAccountId ?? undefined;
+    return Promise.resolve(true);
+  }
+
+  clearGithubAccountId(accountId: number): Promise<void> {
+    for (const key of this.store.values()) {
+      if (key.githubAccountId === accountId) {
+        key.githubAccountId = undefined;
+      }
+    }
+    return Promise.resolve();
+  }
+
   delete(id: string): Promise<boolean> {
     return Promise.resolve(this.store.delete(id));
   }

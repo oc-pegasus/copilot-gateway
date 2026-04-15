@@ -21,7 +21,7 @@ import { authMiddleware, adminOnlyMiddleware } from "./middleware/auth.ts";
 import { usageMiddleware } from "./middleware/usage.ts";
 import { LoginPage } from "./ui/login.tsx";
 import { DashboardPage } from "./ui/dashboard.tsx";
-import { listKeys, createKey, deleteKey, rotateKey, renameKey } from "./routes/api-keys.ts";
+import { listKeys, createKey, deleteKey, rotateKey, updateKey } from "./routes/api-keys.ts";
 import { tokenUsage } from "./routes/token-usage.ts";
 import { exportData, importData } from "./routes/data-transfer.ts";
 
@@ -63,7 +63,7 @@ adminApi.use("*", adminOnlyMiddleware);
 adminApi.get("/copilot-quota", copilotQuota);
 adminApi.post("/keys", createKey);
 adminApi.post("/keys/:id/rotate", rotateKey);
-adminApi.patch("/keys/:id", renameKey);
+adminApi.patch("/keys/:id", updateKey);
 adminApi.delete("/keys/:id", deleteKey);
 adminApi.get("/export", exportData);
 adminApi.post("/import", importData);

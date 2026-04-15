@@ -11,7 +11,8 @@ import {
 
 export const models = async (c: Context) => {
   try {
-    const { token: githubToken, accountType } = await getGithubCredentials();
+    const githubAccountId = c.get("githubAccountId") as number | undefined;
+    const { token: githubToken, accountType } = await getGithubCredentials(githubAccountId);
     const resp = await copilotFetch(
       "/models",
       { method: "GET" },
