@@ -113,17 +113,18 @@ const BILLING_HEADER_LINE_RE =
 const CCH_HASH_RE = /cch=[0-9a-f]{5,};?/gi;
 
 function stripBillingAttribution(text: string): string {
-  let result = text
+  return text
     .replace(BILLING_HEADER_LINE_RE, "")
     .replace(CCH_HASH_RE, "")
     .trim();
-  // Never return empty — Anthropic API rejects empty text content blocks
-  return result || " ";
 }
 
 function stripReservedKeywords(payload: AnthropicMessagesPayload): void {
   if (typeof payload.system === "string") {
     payload.system = stripBillingAttribution(payload.system);
+    if (!payload.system) {
+      delete (payload as Record<string, unknown>).system;
+    }
   } else if (Array.isArray(payload.system)) {
     for (const block of payload.system) {
       block.text = stripBillingAttribution(block.text);
