@@ -721,6 +721,16 @@ export function renderKeysTab() {
               class="!text-xs !py-1.5 !px-3 !w-32 !rounded-lg"
               @keydown.enter="createNewKey()"
             />
+            <select
+              x-show="githubAccounts.length > 1"
+              x-model="newKeyBackend"
+              class="!text-xs !py-1.5 !px-3 !rounded-lg !w-32 bg-surface-raised border border-white/10 text-white"
+            >
+              <option value="">Default Backend</option>
+              <template x-for="acct in githubAccounts" :key="acct.id">
+                <option :value="acct.id" x-text="'@' + acct.login"></option>
+              </template>
+            </select>
             <button
               @click="createNewKey()"
               class="btn-primary !text-xs !py-1.5 !px-3 !rounded-lg whitespace-nowrap"
@@ -771,6 +781,12 @@ export function renderKeysTab() {
                     Last Used
                   </th>
                   <th
+                    x-show="isAdmin && githubAccounts.length > 1"
+                    class="text-left py-2 pr-4 text-xs font-medium text-gray-500 uppercase tracking-widest"
+                  >
+                    Backend
+                  </th>
+                  <th
                     x-show="isAdmin"
                     class="text-right py-2 pr-2 text-xs font-medium text-gray-500 uppercase tracking-widest"
                   >
@@ -817,6 +833,18 @@ export function renderKeysTab() {
                       ></span>
                       <span x-show="!k.last_used_at" class="text-gray-600 text-xs"
                       >Never</span>
+                    </td>
+                    <td x-show="isAdmin && githubAccounts.length > 1" class="py-3 pr-4" @click.stop>
+                      <select
+                        @change="updateKeyBackend(k.id, $event.target.value === '' ? null : Number($event.target.value))"
+                        class="!text-xs !py-1 !px-2 !rounded bg-surface-800 border border-white/10 cursor-pointer"
+                        :class="k.github_account_id ? 'text-accent-cyan' : 'text-gray-500'"
+                      >
+                        <option value="" :selected="!k.github_account_id">Default</option>
+                        <template x-for="acct in githubAccounts" :key="acct.id">
+                          <option :value="acct.id" :selected="k.github_account_id === acct.id" x-text="'@' + acct.login"></option>
+                        </template>
+                      </select>
                     </td>
                     <td class="py-3 pr-2 text-right">
                       <div class="flex items-center justify-end gap-1">
