@@ -724,7 +724,7 @@ export function renderKeysTab() {
             <select
               x-show="githubAccounts.length > 1"
               x-model="newKeyBackend"
-              class="!text-xs !py-1.5 !px-3 !rounded-lg !w-32 bg-surface-raised border border-white/10 text-white"
+              class="text-xs bg-surface-800 text-gray-300 border border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-accent-cyan/50 cursor-pointer w-32"
             >
               <option value="">Default Backend</option>
               <template x-for="acct in githubAccounts" :key="acct.id">
@@ -837,7 +837,7 @@ export function renderKeysTab() {
                     <td x-show="isAdmin && githubAccounts.length > 1" class="py-3 pr-4" @click.stop>
                       <select
                         @change="updateKeyBackend(k.id, $event.target.value === '' ? null : Number($event.target.value))"
-                        class="!text-xs !py-1 !px-2 !rounded bg-surface-800 border border-white/10 cursor-pointer"
+                        class="text-xs bg-surface-800 border border-white/10 rounded px-2 py-1 outline-none focus:border-accent-cyan/50 cursor-pointer"
                         :class="k.github_account_id ? 'text-accent-cyan' : 'text-gray-500'"
                       >
                         <option value="" :selected="!k.github_account_id">Default</option>
