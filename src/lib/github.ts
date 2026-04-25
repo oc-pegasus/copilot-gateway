@@ -29,6 +29,7 @@ export async function addGithubAccount(
 export async function removeGithubAccount(userId: number): Promise<void> {
   const repo = getRepo().github;
   await repo.deleteAccount(userId);
+  await getRepo().apiKeys.clearGithubAccountId(userId);
   const activeId = await repo.getActiveId();
   if (activeId === userId) {
     await repo.clearActiveId();
@@ -52,7 +53,15 @@ export async function getActiveGithubAccount() {
   return repo.getAccount(activeId);
 }
 
-export async function getGithubCredentials(): Promise<GithubCredentials> {
+export async function getGithubCredentials(githubAccountId?: number): Promise<GithubCredentials> {
+  if (githubAccountId != null) {
+    const repo = getRepo().github;
+    const account = await repo.getAccount(githubAccountId);
+    if (account) {
+      return { token: account.token, accountType: account.accountType };
+    }
+    // Fallback to active account if specified account not found
+  }
   const account = await getActiveGithubAccount();
   if (!account) throw new Error("No GitHub account connected — add one via the dashboard");
   return { token: account.token, accountType: account.accountType };

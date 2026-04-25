@@ -9,6 +9,7 @@ import {
   renameApiKey,
   rotateApiKey,
 } from "../../lib/api-keys.ts";
+import { getRepo } from "../../repo/index.ts";
 import { apiKeyToJson } from "./serialize.ts";
 
 export const listKeys = async (c: Context) => {
@@ -24,12 +25,13 @@ export const listKeys = async (c: Context) => {
 };
 
 export const createKey = async (c: Context) => {
-  const body = await c.req.json<{ name?: string }>();
+  const body = await c.req.json<{ name?: string; github_account_id?: number }>();
   if (!body.name || typeof body.name !== "string") {
     return c.json({ error: "name is required" }, 400);
   }
 
-  const key = await createApiKey(body.name);
+  const githubAccountId = typeof body.github_account_id === "number" ? body.github_account_id : undefined;
+  const key = await createApiKey(body.name, githubAccountId);
   return c.json(apiKeyToJson(key), 201);
 };
 
@@ -55,6 +57,33 @@ export const renameKey = async (c: Context) => {
   }
 
   const key = await renameApiKey(id, body.name);
+  if (!key) return c.json({ error: "Key not found" }, 404);
+  return c.json(apiKeyToJson(key));
+};
+
+export const updateKey = async (c: Context) => {
+  const id = c.req.param("id") ?? "";
+  const body = await c.req.json<{ name?: string; github_account_id?: number | null }>();
+
+  const hasName = typeof body.name === "string" && body.name.length > 0;
+  const hasGithubAccountId = "github_account_id" in body;
+
+  if (!hasName && !hasGithubAccountId) {
+    return c.json({ error: "name or github_account_id is required" }, 400);
+  }
+
+  if (hasName) {
+    const renamed = await renameApiKey(id, body.name!);
+    if (!renamed) return c.json({ error: "Key not found" }, 404);
+  }
+
+  if (hasGithubAccountId) {
+    const githubAccountId = typeof body.github_account_id === "number" ? body.github_account_id : null;
+    const updated = await getRepo().apiKeys.updateGithubAccountId(id, githubAccountId);
+    if (!updated) return c.json({ error: "Key not found" }, 404);
+  }
+
+  const key = await getApiKeyById(id);
   if (!key) return c.json({ error: "Key not found" }, 404);
   return c.json(apiKeyToJson(key));
 };

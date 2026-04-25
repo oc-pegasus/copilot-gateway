@@ -7,12 +7,13 @@ function generateKey(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function createApiKey(name: string) {
+export async function createApiKey(name: string, githubAccountId?: number) {
   const key = {
     id: crypto.randomUUID(),
     name,
     key: generateKey(),
     createdAt: new Date().toISOString(),
+    ...(githubAccountId != null && { githubAccountId }),
   };
   await getRepo().apiKeys.save(key);
   return key;
@@ -49,7 +50,7 @@ export function deleteApiKey(id: string) {
 export async function validateApiKey(rawKey: string) {
   const key = await getRepo().apiKeys.findByRawKey(rawKey);
   if (!key) return null;
-  return { id: key.id, name: key.name };
+  return { id: key.id, name: key.name, githubAccountId: key.githubAccountId };
 }
 
 export async function touchApiKeyLastUsed(id: string): Promise<void> {

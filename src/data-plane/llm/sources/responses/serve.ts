@@ -50,7 +50,7 @@ export const serveResponses = async (
     normalizeResponsesRequest(payload);
     c.set("model", payload.model || "unknown");
 
-    const { token: githubToken, accountType } = await getGithubCredentials();
+    const { token: githubToken, accountType } = await getGithubCredentials(c.get("githubAccountId") as number | undefined);
     const plan = await planResponsesRequest(payload, githubToken, accountType);
     if (!plan) return unsupportedResponsesModelResponse(payload.model);
 

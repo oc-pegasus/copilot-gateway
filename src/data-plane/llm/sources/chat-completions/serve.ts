@@ -39,7 +39,7 @@ export const serveChatCompletions = async (
     normalizeChatRequest(payload);
     c.set("model", payload.model || "unknown");
 
-    const { token: githubToken, accountType } = await getGithubCredentials();
+    const { token: githubToken, accountType } = await getGithubCredentials(c.get("githubAccountId") as number | undefined);
     const plan = await planChatRequest(payload, githubToken, accountType);
 
     if (plan.target === "messages") {

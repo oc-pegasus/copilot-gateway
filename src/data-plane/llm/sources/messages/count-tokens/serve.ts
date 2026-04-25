@@ -11,7 +11,7 @@ export const countTokens = async (c: Context) => {
       payload.model = normalizeModelName(payload.model);
     }
 
-    const { token: githubToken, accountType } = await getGithubCredentials();
+    const { token: githubToken, accountType } = await getGithubCredentials(c.get("githubAccountId") as number | undefined);
 
     const resp = await copilotFetch(
       "/v1/messages/count_tokens",
