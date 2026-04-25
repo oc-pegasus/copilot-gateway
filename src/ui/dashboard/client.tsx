@@ -425,7 +425,8 @@ export function dashboardAssets() {
                   this.loadSearchConfig();
                 } else if (this.tab === 'keys') {
                   this.loadKeys();
-                } else if (this.tab === 'usage') {
+                  if (this.isAdmin) this.loadMe();
+              } else if (this.tab === 'usage') {
                   this.loadTokenUsage();
                 }
 
@@ -465,6 +466,7 @@ export function dashboardAssets() {
                     this.renderTokenCharts();
                   }
                 } else if (t === 'keys') {
+                  if (!this.meLoaded && this.isAdmin) this.loadMe();
                   await this.loadKeys();
                 } else if (t === 'models') {
                   if (this.allModels.length === 0) await this.loadAllModels();
