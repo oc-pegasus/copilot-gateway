@@ -6,21 +6,25 @@
 export interface ResponsesPayload {
   model: string;
   input: string | ResponseInputItem[];
-  instructions: string | null;
-  temperature: number | null;
-  top_p: number | null;
-  max_output_tokens: number | null;
-  tools: ResponseTool[] | null;
-  tool_choice: ResponseToolChoice;
-  metadata: Record<string, unknown> | null;
-  stream: boolean | null;
-  store: boolean;
-  parallel_tool_calls: boolean;
+  instructions?: string | null;
+  temperature?: number | null;
+  top_p?: number | null;
+  max_output_tokens?: number | null;
+  tools?: ResponseTool[] | null;
+  tool_choice?: ResponseToolChoice;
+  metadata?: Record<string, unknown> | null;
+  stream?: boolean | null;
+  store?: boolean | null;
+  parallel_tool_calls?: boolean | null;
   reasoning?: {
     effort?: string;
     summary?: "detailed" | "auto" | "concise";
   };
   include?: string[];
+  text?: { format?: Record<string, unknown> | null } | null;
+  prompt_cache_key?: string | null;
+  safety_identifier?: string | null;
+  service_tier?: string | null;
 }
 
 export type ResponseInputItem =
@@ -232,6 +236,15 @@ export type ResponseStreamEvent =
   | { type: "response.completed"; response: ResponsesResult }
   | { type: "response.incomplete"; response: ResponsesResult }
   | { type: "response.failed"; response: ResponsesResult }
-  | { type: "error"; message: string; code?: string }
+  | {
+    type: "error";
+    message: string;
+    code?: string;
+    name?: string;
+    stack?: string;
+    cause?: unknown;
+    source_api?: string;
+    target_api?: string;
+  }
   | { type: "ping" }
   | { type: string; [key: string]: unknown };

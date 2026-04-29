@@ -1,48 +1,38 @@
-import type { MessagesResponse } from "../../../../lib/messages-types.ts";
 import type {
   ChatCompletionChunk,
-  ChatCompletionResponse,
 } from "../../../../lib/chat-completions-types.ts";
+import type { MessagesStreamEventData } from "../../../../lib/messages-types.ts";
 import {
   createChatCompletionsToMessagesStreamState,
+  flushChatCompletionsToMessagesEvents,
   translateChatCompletionsChunkToMessagesEvents,
 } from "../../../../lib/translate/chat-completions-to-messages-stream.ts";
-import { translateChatCompletionsToMessagesResponse } from "../../../../lib/translate/chat-completions-to-messages.ts";
-import {
-  jsonFrame,
-  sseFrame,
-  type StreamFrame,
-} from "../../shared/stream/types.ts";
+import { protocolEventsUntilTerminal } from "../../shared/stream/protocol-algebra.ts";
+import { eventFrame, type ProtocolFrame } from "../../shared/stream/types.ts";
+import { upstreamChatCompletionStreamAlgebra } from "../upstream-protocol.ts";
 
 export const translateToSourceEvents = async function* (
-  frames: AsyncIterable<StreamFrame<ChatCompletionResponse>>,
-): AsyncGenerator<StreamFrame<MessagesResponse>> {
+  frames: AsyncIterable<ProtocolFrame<ChatCompletionChunk>>,
+): AsyncGenerator<ProtocolFrame<MessagesStreamEventData>> {
   const state = createChatCompletionsToMessagesStreamState();
 
-  for await (const frame of frames) {
-    if (frame.type === "json") {
-      yield jsonFrame(translateChatCompletionsToMessagesResponse(frame.data));
-      continue;
-    }
-
-    const data = frame.data.trim();
-    if (!data || data === "[DONE]") continue;
-
-    let chunk: ChatCompletionChunk;
-
-    try {
-      chunk = JSON.parse(data) as ChatCompletionChunk;
-    } catch {
-      continue;
-    }
-
+  for await (
+    const chunk of protocolEventsUntilTerminal(
+      frames,
+      upstreamChatCompletionStreamAlgebra,
+    )
+  ) {
     for (
       const event of translateChatCompletionsChunkToMessagesEvents(
         chunk,
         state,
       )
     ) {
-      yield sseFrame(JSON.stringify(event), event.type);
+      yield eventFrame(event);
     }
+  }
+
+  for (const event of flushChatCompletionsToMessagesEvents(state)) {
+    yield eventFrame(event);
   }
 };

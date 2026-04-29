@@ -1,11 +1,9 @@
 import type { Context } from "hono";
-import type {
-  ResponsesPayload,
-  ResponsesResult,
-} from "../../../../lib/responses-types.ts";
+import type { ResponsesPayload } from "../../../../lib/responses-types.ts";
 import { getGithubCredentials } from "../../../../lib/github.ts";
 import { normalizeResponsesRequest } from "./normalize/request.ts";
 import { planResponsesRequest } from "./plan.ts";
+import { getModelCapabilities } from "../../shared/models/get-model-capabilities.ts";
 import { buildTargetRequest as buildMessagesTargetRequest } from "../../translate/responses-via-messages/build-target-request.ts";
 import { buildTargetRequest as buildChatCompletionsTargetRequest } from "../../translate/responses-via-chat-completions/build-target-request.ts";
 import { emitToResponses } from "../../targets/responses/emit.ts";
@@ -19,14 +17,15 @@ import {
   type StreamExecuteResult,
 } from "../../shared/errors/result.ts";
 import { toInternalDebugError } from "../../shared/errors/internal-debug-error.ts";
-import type { StreamFrame } from "../../shared/stream/types.ts";
+import type { ProtocolFrame } from "../../shared/stream/types.ts";
+import type { SourceResponseStreamEvent } from "./events/protocol.ts";
 
 const withTranslatedEvents = <T>(
   result: StreamExecuteResult<T>,
   translate: (
-    events: AsyncIterable<StreamFrame<T>>,
-  ) => AsyncIterable<StreamFrame<ResponsesResult>>,
-): StreamExecuteResult<ResponsesResult> =>
+    events: AsyncIterable<ProtocolFrame<T>>,
+  ) => AsyncIterable<ProtocolFrame<SourceResponseStreamEvent>>,
+): StreamExecuteResult<SourceResponseStreamEvent> =>
   result.type === "events"
     ? { type: "events", events: translate(result.events) }
     : result;
@@ -49,10 +48,17 @@ export const serveResponses = async (
     const payload = await c.req.json<ResponsesPayload>();
     normalizeResponsesRequest(payload);
     c.set("model", payload.model || "unknown");
+    const apiKeyId = c.get("apiKeyId") as string | undefined;
 
     const { token: githubToken, accountType } = await getGithubCredentials(c.get("githubAccountId") as number | undefined);
-    const plan = await planResponsesRequest(payload, githubToken, accountType);
+    const capabilities = await getModelCapabilities(
+      payload.model,
+      githubToken,
+      accountType,
+    );
+    const plan = planResponsesRequest(payload, capabilities);
     if (!plan) return unsupportedResponsesModelResponse(payload.model);
+    payload.model = capabilities.model?.id ?? payload.model;
 
     if (plan.target === "responses") {
       return await respondResponses(
@@ -69,12 +75,13 @@ export const serveResponses = async (
     }
 
     if (plan.target === "messages") {
-      const messagesPayload = buildMessagesTargetRequest(payload);
+      const messagesPayload = await buildMessagesTargetRequest(payload);
       const result = await emitToMessages({
         sourceApi: "responses",
         payload: messagesPayload,
         githubToken,
         accountType,
+        apiKeyId,
         fetchOptions: plan.fetchOptions,
       });
 

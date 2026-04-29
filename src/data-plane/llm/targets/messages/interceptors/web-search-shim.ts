@@ -19,7 +19,7 @@ import type {
   MessagesWebSearchResultBlock,
   MessagesWebSearchToolResultError,
 } from "../../../../../lib/messages-types.ts";
-import { collectMessagesEventsToResponse } from "../../../sources/messages/collect/from-events.ts";
+import { collectMessagesProtocolEventsToResponse } from "../../../sources/messages/events/to-response.ts";
 import { internalErrorResult } from "../../../shared/errors/result.ts";
 import { toInternalDebugError } from "../../../shared/errors/internal-debug-error.ts";
 import { jsonFrame, type StreamFrame } from "../../../shared/stream/types.ts";
@@ -28,9 +28,18 @@ import {
   type WebSearchProvider,
 } from "../../../../tools/web-search/provider.ts";
 import { loadSearchConfig } from "../../../../tools/web-search/search-config.ts";
-import type { WebSearchProviderResult } from "../../../../tools/web-search/types.ts";
+import {
+  searchWebAndRecordUsage,
+  searchWebWithoutRecordingUsage,
+} from "../../../../tools/web-search/search.ts";
+import type {
+  WebSearchProviderName,
+  WebSearchProviderRequest,
+  WebSearchProviderResult,
+} from "../../../../tools/web-search/types.ts";
 import type { TargetInterceptor } from "../../run-interceptors.ts";
 import type { EmitToMessagesInput } from "../emit.ts";
+import { messagesStreamFramesToEvents } from "../events/from-stream.ts";
 
 const MAX_QUERY_LENGTH = 1000;
 const WEB_SEARCH_TOOL_NAME = "web_search";
@@ -58,6 +67,12 @@ interface OwnedReplayToolResult {
 interface ReplayAwareMessagesWebSearchShimState {
   priorSearchUseCount: number;
   requestSearchResultOwnership: SearchResultOwnership[];
+}
+
+interface ActiveMessagesWebSearchProvider {
+  providerName: WebSearchProviderName;
+  search: WebSearchProvider;
+  apiKeyId?: string;
 }
 
 export type MessagesWebSearchShimState =
@@ -838,10 +853,26 @@ const buildNativeWebSearchResultBlockFromProviderResult = (
   };
 };
 
+const searchWithActiveMessagesWebSearchProvider = (
+  provider: ActiveMessagesWebSearchProvider,
+  request: WebSearchProviderRequest,
+): Promise<WebSearchProviderResult> =>
+  provider.apiKeyId
+    ? searchWebAndRecordUsage({
+      provider: provider.search,
+      providerName: provider.providerName,
+      keyId: provider.apiKeyId,
+      request,
+    })
+    : searchWebWithoutRecordingUsage({
+      provider: provider.search,
+      request,
+    });
+
 export const rewriteMessagesWebSearchResponseToNative = async (
   response: MessagesResponse,
   state: MessagesWebSearchShimState,
-  provider?: WebSearchProvider,
+  provider?: ActiveMessagesWebSearchProvider,
 ): Promise<MessagesResponse> => {
   if (state.mode === "inactive") {
     return response;
@@ -914,12 +945,15 @@ export const rewriteMessagesWebSearchResponseToNative = async (
     currentSearchUseCount += 1;
 
     try {
-      const providerResult = await provider!({
-        query,
-        allowedDomains: state.allowedDomains,
-        blockedDomains: state.blockedDomains,
-        userLocation: state.userLocation,
-      });
+      const providerResult = await searchWithActiveMessagesWebSearchProvider(
+        provider!,
+        {
+          query,
+          allowedDomains: state.allowedDomains,
+          blockedDomains: state.blockedDomains,
+          userLocation: state.userLocation,
+        },
+      );
 
       rewrittenContent.push(
         buildNativeWebSearchResultBlockFromProviderResult(
@@ -958,14 +992,16 @@ export const collectAndRewriteMessagesWebSearchEventsToNative =
   async function* (
     frames: AsyncIterable<StreamFrame<MessagesResponse>>,
     state: MessagesWebSearchShimState,
-    provider?: WebSearchProvider,
+    provider?: ActiveMessagesWebSearchProvider,
   ): AsyncGenerator<StreamFrame<MessagesResponse>> {
     // Native-looking web_search replay is order-sensitive: we may need to
     // execute multiple searches, inject result blocks, and then rewrite later
     // text citations against the final search-result ordering. That forces us
     // to buffer the whole upstream Messages stream here and trade first-byte
     // latency for a single coherent rewritten response.
-    const response = await collectMessagesEventsToResponse(frames);
+    const response = await collectMessagesProtocolEventsToResponse(
+      messagesStreamFramesToEvents(frames),
+    );
     yield jsonFrame(
       await rewriteMessagesWebSearchResponseToNative(response, state, provider),
     );
@@ -985,17 +1021,24 @@ const buildSyntheticInvalidRequestUpstreamError = (message: string) => ({
 });
 
 const resolveActiveMessagesWebSearchProvider = async (
-  state: Extract<MessagesWebSearchShimState, { mode: "active" }>,
   sourceApi: EmitToMessagesInput["sourceApi"],
+  apiKeyId: string | undefined,
 ): Promise<
-  | { type: "ok"; provider: WebSearchProvider }
+  | { type: "ok"; provider: ActiveMessagesWebSearchProvider }
   | ReturnType<typeof internalErrorResult>
 > => {
   const searchConfig = await loadSearchConfig();
   const configuredProvider = resolveConfiguredWebSearchProvider(searchConfig);
 
   if (configuredProvider.type === "enabled") {
-    return { type: "ok", provider: configuredProvider.search };
+    return {
+      type: "ok",
+      provider: {
+        providerName: configuredProvider.provider,
+        search: configuredProvider.search,
+        ...(apiKeyId ? { apiKeyId } : {}),
+      },
+    };
   }
 
   return internalErrorResult(
@@ -1037,8 +1080,8 @@ export const withMessagesWebSearchShim: TargetInterceptor<
 
   const provider = prepared.state.mode === "active"
     ? await resolveActiveMessagesWebSearchProvider(
-      prepared.state,
       ctx.sourceApi,
+      ctx.apiKeyId,
     )
     : { type: "ok" as const, provider: undefined };
   if (provider.type !== "ok") {

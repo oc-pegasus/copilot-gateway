@@ -1,5 +1,5 @@
 import type { ResponsesPayload } from "../../../../lib/responses-types.ts";
-import { getModelCapabilities } from "../../shared/models/get-model-capabilities.ts";
+import type { ModelCapabilities } from "../../shared/models/get-model-capabilities.ts";
 import type { ResponsesPlan } from "../../shared/types/plan.ts";
 
 const hasVision = (payload: ResponsesPayload): boolean => {
@@ -22,22 +22,18 @@ const getInitiator = (payload: ResponsesPayload): "user" | "agent" => {
   return lastItem?.type === "function_call_output" ? "agent" : "user";
 };
 
-export const planResponsesRequest = async (
+export const planResponsesRequest = (
   payload: ResponsesPayload,
-  githubToken: string,
-  accountType: string,
-): Promise<ResponsesPlan | null> => {
-  const capabilities = await getModelCapabilities(
-    payload.model,
-    githubToken,
-    accountType,
-  );
+  capabilities: ModelCapabilities,
+): ResponsesPlan | null => {
   const wantsStream = payload.stream === true;
   const fetchOptions = {
     vision: hasVision(payload),
     initiator: getInitiator(payload),
   };
 
+  // The broader Responses -> Messages -> Chat fallback surface is product
+  // behavior here, not an accidental route-order default.
   if (capabilities.supportsResponses) {
     return {
       source: "responses",

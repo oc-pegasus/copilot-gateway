@@ -1,9 +1,9 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import {
-  reassembleChatCompletionsSSE,
-  reassembleMessagesSSE,
-  reassembleResponsesSSE,
-} from "./sse-reassemble.ts";
+  reassembleChatCompletionChunks,
+  reassembleMessagesEvents,
+  reassembleResponsesEvents,
+} from "./event-reassemble.ts";
 import type {
   MessagesResponse,
   MessagesSearchResultBlock,
@@ -18,23 +18,21 @@ import type {
 import type { ChatCompletionResponse } from "./chat-completions-types.ts";
 import type { ResponsesResult } from "./responses-types.ts";
 
-function makeSSEBody(
+function makeEvents<T = any>(
   chunks: Array<{ event?: string; data: unknown }>,
-): ReadableStream<Uint8Array> {
-  const text = chunks.map((c) => {
-    const lines: string[] = [];
-    if (c.event) lines.push(`event: ${c.event}`);
-    const data = typeof c.data === "string" ? c.data : JSON.stringify(c.data);
-    lines.push(`data: ${data}`);
-    return lines.join("\n");
-  }).join("\n\n") + "\n\n";
+): AsyncIterable<T> {
+  return (async function* () {
+    for (const chunk of chunks) {
+      if (typeof chunk.data === "string") continue;
 
-  return new ReadableStream({
-    start(controller) {
-      controller.enqueue(new TextEncoder().encode(text));
-      controller.close();
-    },
-  });
+      const data = chunk.data as Record<string, unknown>;
+      yield (
+        chunk.event && typeof data.type !== "string"
+          ? { ...data, type: chunk.event }
+          : data
+      ) as T;
+    }
+  })();
 }
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends
@@ -56,8 +54,8 @@ type _serverToolUseInputIsQueryObject = Expect<
 
 // ── Messages native web search types ──
 
-Deno.test("reassembleMessagesSSE reassembles text response", async () => {
-  const body = makeSSEBody([
+Deno.test("reassembleMessagesEvents reassembles text response", async () => {
+  const body = makeEvents([
     {
       event: "message_start",
       data: {
@@ -113,7 +111,7 @@ Deno.test("reassembleMessagesSSE reassembles text response", async () => {
     { event: "message_stop", data: { type: "message_stop" } },
   ]);
 
-  const result: MessagesResponse = await reassembleMessagesSSE(body);
+  const result: MessagesResponse = await reassembleMessagesEvents(body);
 
   assertEquals(result.id, "msg_1");
   assertEquals(result.model, "claude-test");
@@ -128,7 +126,7 @@ Deno.test("reassembleMessagesSSE reassembles text response", async () => {
   assertEquals(result.usage.output_tokens, 5);
 });
 
-// ── reassembleMessagesSSE ──
+// ── reassembleMessagesEvents ──
 
 Deno.test("MessagesTool supports both client and native web search shapes", () => {
   const clientTool: MessagesTool = {
@@ -205,8 +203,8 @@ Deno.test("Anthropic native web search shared shapes match Task 1 contracts", ()
   }
 });
 
-Deno.test("reassembleMessagesSSE reassembles tool_use response", async () => {
-  const body = makeSSEBody([
+Deno.test("reassembleMessagesEvents reassembles tool_use response", async () => {
+  const body = makeEvents([
     {
       event: "message_start",
       data: {
@@ -262,7 +260,7 @@ Deno.test("reassembleMessagesSSE reassembles tool_use response", async () => {
     { event: "message_stop", data: { type: "message_stop" } },
   ]);
 
-  const result = await reassembleMessagesSSE(body);
+  const result = await reassembleMessagesEvents(body);
 
   assertEquals(result.stop_reason, "tool_use");
   assertEquals(result.content.length, 1);
@@ -278,8 +276,8 @@ Deno.test("reassembleMessagesSSE reassembles tool_use response", async () => {
   assertEquals(tu.input, { x: 42 });
 });
 
-Deno.test("reassembleMessagesSSE reassembles thinking blocks", async () => {
-  const body = makeSSEBody([
+Deno.test("reassembleMessagesEvents reassembles thinking blocks", async () => {
+  const body = makeEvents([
     {
       event: "message_start",
       data: {
@@ -355,7 +353,7 @@ Deno.test("reassembleMessagesSSE reassembles thinking blocks", async () => {
     { event: "message_stop", data: { type: "message_stop" } },
   ]);
 
-  const result = await reassembleMessagesSSE(body);
+  const result = await reassembleMessagesEvents(body);
 
   assertEquals(result.content.length, 2);
   assertEquals(result.content[0].type, "thinking");
@@ -369,8 +367,62 @@ Deno.test("reassembleMessagesSSE reassembles thinking blocks", async () => {
   assertEquals(result.content[1].type, "text");
 });
 
-Deno.test("reassembleMessagesSSE throws on error event", async () => {
-  const body = makeSSEBody([
+Deno.test("reassembleMessagesEvents omits signature for text-only thinking blocks", async () => {
+  const body = makeEvents([
+    {
+      event: "message_start",
+      data: {
+        type: "message_start",
+        message: {
+          id: "msg_text_only_thinking",
+          type: "message",
+          role: "assistant",
+          content: [],
+          model: "claude-test",
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 5, output_tokens: 0 },
+        },
+      },
+    },
+    {
+      event: "content_block_start",
+      data: {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "thinking", thinking: "" },
+      },
+    },
+    {
+      event: "content_block_delta",
+      data: {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "thinking_delta", thinking: "trace" },
+      },
+    },
+    {
+      event: "content_block_stop",
+      data: { type: "content_block_stop", index: 0 },
+    },
+    {
+      event: "message_delta",
+      data: {
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null },
+        usage: { output_tokens: 4 },
+      },
+    },
+    { event: "message_stop", data: { type: "message_stop" } },
+  ]);
+
+  const result = await reassembleMessagesEvents(body);
+
+  assertEquals(result.content[0], { type: "thinking", thinking: "trace" });
+});
+
+Deno.test("reassembleMessagesEvents throws on error event", async () => {
+  const body = makeEvents([
     {
       event: "error",
       data: {
@@ -381,14 +433,14 @@ Deno.test("reassembleMessagesSSE throws on error event", async () => {
   ]);
 
   await assertRejects(
-    () => reassembleMessagesSSE(body),
+    () => reassembleMessagesEvents(body),
     Error,
     "overloaded",
   );
 });
 
-Deno.test("reassembleMessagesSSE reassembles native web search blocks and usage", async () => {
-  const body = makeSSEBody([
+Deno.test("reassembleMessagesEvents reassembles native web search blocks and usage", async () => {
+  const body = makeEvents([
     {
       event: "message_start",
       data: {
@@ -493,7 +545,7 @@ Deno.test("reassembleMessagesSSE reassembles native web search blocks and usage"
     { event: "message_stop", data: { type: "message_stop" } },
   ]);
 
-  const result = await reassembleMessagesSSE(body);
+  const result = await reassembleMessagesEvents(body);
 
   assertEquals(result.stop_reason, "pause_turn");
   assertEquals(result.usage.server_tool_use?.web_search_requests, 1);
@@ -506,8 +558,8 @@ Deno.test("reassembleMessagesSSE reassembles native web search blocks and usage"
   );
 });
 
-Deno.test("reassembleMessagesSSE accumulates citations across multiple text deltas", async () => {
-  const body = makeSSEBody([
+Deno.test("reassembleMessagesEvents accumulates citations across multiple text deltas", async () => {
+  const body = makeEvents([
     {
       event: "message_start",
       data: {
@@ -583,7 +635,7 @@ Deno.test("reassembleMessagesSSE accumulates citations across multiple text delt
     { event: "message_stop", data: { type: "message_stop" } },
   ]);
 
-  const result = await reassembleMessagesSSE(body);
+  const result = await reassembleMessagesEvents(body);
   const block = result.content[0] as MessagesTextBlock;
 
   assertEquals(block.text, "First sentence. Second sentence.");
@@ -592,8 +644,8 @@ Deno.test("reassembleMessagesSSE accumulates citations across multiple text delt
   assertEquals(block.citations?.[1]?.type, "web_search_result_location");
 });
 
-Deno.test("reassembleMessagesSSE handles citations_delta and normalizes source fields", async () => {
-  const body = makeSSEBody([
+Deno.test("reassembleMessagesEvents handles citations_delta and normalizes source fields", async () => {
+  const body = makeEvents([
     {
       event: "message_start",
       data: {
@@ -660,7 +712,7 @@ Deno.test("reassembleMessagesSSE handles citations_delta and normalizes source f
     { event: "message_stop", data: { type: "message_stop" } },
   ]);
 
-  const result = await reassembleMessagesSSE(body);
+  const result = await reassembleMessagesEvents(body);
   const block = result.content[0] as MessagesTextBlock;
 
   assertEquals(block.text, "Quoted text.");
@@ -676,10 +728,10 @@ Deno.test("reassembleMessagesSSE handles citations_delta and normalizes source f
   });
 });
 
-// ── reassembleChatCompletionsSSE ──
+// ── reassembleChatCompletionChunks ──
 
-Deno.test("reassembleChatCompletionsSSE reassembles text response", async () => {
-  const body = makeSSEBody([
+Deno.test("reassembleChatCompletionChunks reassembles text response", async () => {
+  const body = makeEvents([
     {
       data: {
         id: "cmpl_1",
@@ -710,7 +762,7 @@ Deno.test("reassembleChatCompletionsSSE reassembles text response", async () => 
     { data: "[DONE]" },
   ]);
 
-  const result: ChatCompletionResponse = await reassembleChatCompletionsSSE(
+  const result: ChatCompletionResponse = await reassembleChatCompletionChunks(
     body,
   );
 
@@ -725,8 +777,27 @@ Deno.test("reassembleChatCompletionsSSE reassembles text response", async () => 
   assertEquals(result.usage?.prompt_tokens, 10);
 });
 
-Deno.test("reassembleChatCompletionsSSE reassembles tool calls", async () => {
-  const body = makeSSEBody([
+Deno.test("reassembleChatCompletionChunks rejects upstream Chat error payloads", async () => {
+  const body = makeEvents([
+    {
+      data: {
+        error: {
+          type: "server_error",
+          message: "upstream chat failed",
+        },
+      },
+    },
+  ]);
+
+  await assertRejects(
+    async () => await reassembleChatCompletionChunks(body),
+    Error,
+    "Upstream Chat Completions SSE error: server_error: upstream chat failed",
+  );
+});
+
+Deno.test("reassembleChatCompletionChunks reassembles tool calls", async () => {
+  const body = makeEvents([
     {
       data: {
         id: "cmpl_2",
@@ -770,7 +841,7 @@ Deno.test("reassembleChatCompletionsSSE reassembles tool calls", async () => {
     { data: "[DONE]" },
   ]);
 
-  const result = await reassembleChatCompletionsSSE(body);
+  const result = await reassembleChatCompletionChunks(body);
 
   assertEquals(result.choices[0].finish_reason, "tool_calls");
   assertEquals(result.choices[0].message.tool_calls?.length, 1);
@@ -785,8 +856,8 @@ Deno.test("reassembleChatCompletionsSSE reassembles tool calls", async () => {
   );
 });
 
-Deno.test("reassembleChatCompletionsSSE reassembles reasoning fields", async () => {
-  const body = makeSSEBody([
+Deno.test("reassembleChatCompletionChunks reassembles reasoning fields", async () => {
+  const body = makeEvents([
     {
       data: {
         id: "cmpl_3",
@@ -820,16 +891,94 @@ Deno.test("reassembleChatCompletionsSSE reassembles reasoning fields", async () 
     { data: "[DONE]" },
   ]);
 
-  const result = await reassembleChatCompletionsSSE(body);
+  const result = await reassembleChatCompletionChunks(body);
 
   assertEquals(result.choices[0].message.reasoning_text, "think");
   assertEquals(result.choices[0].message.reasoning_opaque, "enc");
   assertEquals(result.choices[0].message.content, "reply");
 });
 
-// ── reassembleResponsesSSE ──
+Deno.test("reassembleChatCompletionChunks appends reasoning_items deltas in order", async () => {
+  const body = makeEvents([
+    {
+      data: {
+        id: "cmpl_reasoning_items",
+        object: "chat.completion.chunk",
+        created: 3001,
+        model: "gpt-test",
+        choices: [{
+          index: 0,
+          delta: {
+            role: "assistant",
+            reasoning_items: [{
+              type: "reasoning",
+              id: "rs_1",
+              summary: [{ type: "summary_text", text: "first" }],
+              encrypted_content: "enc_1",
+            }],
+          },
+          finish_reason: null,
+        }],
+      },
+    },
+    {
+      data: {
+        id: "cmpl_reasoning_items",
+        object: "chat.completion.chunk",
+        created: 3001,
+        model: "gpt-test",
+        choices: [{
+          index: 0,
+          delta: {
+            reasoning_items: [{
+              type: "reasoning",
+              id: "rs_2",
+              summary: [],
+              encrypted_content: "enc_2",
+            }],
+          },
+          finish_reason: null,
+        }],
+      },
+    },
+    {
+      data: {
+        id: "cmpl_reasoning_items",
+        object: "chat.completion.chunk",
+        created: 3001,
+        model: "gpt-test",
+        choices: [{
+          index: 0,
+          delta: { content: "reply" },
+          finish_reason: "stop",
+        }],
+      },
+    },
+    { data: "[DONE]" },
+  ]);
 
-Deno.test("reassembleResponsesSSE extracts response from completed event", async () => {
+  const result = await reassembleChatCompletionChunks(body);
+
+  assertEquals(result.choices[0].message.reasoning_items, [
+    {
+      type: "reasoning",
+      id: "rs_1",
+      summary: [{ type: "summary_text", text: "first" }],
+      encrypted_content: "enc_1",
+    },
+    {
+      type: "reasoning",
+      id: "rs_2",
+      summary: [],
+      encrypted_content: "enc_2",
+    },
+  ]);
+  assertEquals(result.choices[0].message.content, "reply");
+});
+
+// ── reassembleResponsesEvents ──
+
+Deno.test("reassembleResponsesEvents extracts response from completed event", async () => {
   const expected: ResponsesResult = {
     id: "resp_1",
     object: "response",
@@ -844,7 +993,7 @@ Deno.test("reassembleResponsesSSE extracts response from completed event", async
     usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 },
   };
 
-  const body = makeSSEBody([
+  const body = makeEvents([
     {
       event: "response.created",
       data: {
@@ -869,14 +1018,14 @@ Deno.test("reassembleResponsesSSE extracts response from completed event", async
     },
   ]);
 
-  const result = await reassembleResponsesSSE(body);
+  const result = await reassembleResponsesEvents(body);
 
   assertEquals(result.id, "resp_1");
   assertEquals(result.status, "completed");
   assertEquals(result.output_text, "Hello");
 });
 
-Deno.test("reassembleResponsesSSE handles incomplete event", async () => {
+Deno.test("reassembleResponsesEvents handles incomplete event", async () => {
   const incomplete: ResponsesResult = {
     id: "resp_2",
     object: "response",
@@ -887,31 +1036,31 @@ Deno.test("reassembleResponsesSSE handles incomplete event", async () => {
     incomplete_details: { reason: "max_tokens" },
   };
 
-  const body = makeSSEBody([
+  const body = makeEvents([
     {
       event: "response.incomplete",
       data: { type: "response.incomplete", response: incomplete },
     },
   ]);
 
-  const result = await reassembleResponsesSSE(body);
+  const result = await reassembleResponsesEvents(body);
   assertEquals(result.status, "incomplete");
 });
 
-Deno.test("reassembleResponsesSSE throws on error event", async () => {
-  const body = makeSSEBody([
+Deno.test("reassembleResponsesEvents throws on error event", async () => {
+  const body = makeEvents([
     { event: "error", data: { type: "error", message: "bad request" } },
   ]);
 
   await assertRejects(
-    () => reassembleResponsesSSE(body),
+    () => reassembleResponsesEvents(body),
     Error,
     "bad request",
   );
 });
 
-Deno.test("reassembleResponsesSSE throws when stream ends without terminal event", async () => {
-  const body = makeSSEBody([
+Deno.test("reassembleResponsesEvents throws when stream ends without terminal event", async () => {
+  const body = makeEvents([
     {
       event: "response.created",
       data: { type: "response.created", response: {} },
@@ -919,7 +1068,7 @@ Deno.test("reassembleResponsesSSE throws when stream ends without terminal event
   ]);
 
   await assertRejects(
-    () => reassembleResponsesSSE(body),
+    () => reassembleResponsesEvents(body),
     Error,
     "terminal",
   );

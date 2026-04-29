@@ -6,6 +6,40 @@ import {
 } from "@std/assert";
 import { DashboardPage } from "./dashboard.tsx";
 
+type ChartDataset = {
+  _keyId?: string;
+  _model?: string;
+  label?: string;
+  borderColor?: string;
+  backgroundColor?: string;
+  fill?: string | boolean;
+  spanGaps?: boolean;
+  data: unknown[];
+};
+
+type ChartOptions = {
+  plugins?: {
+    tooltip?: {
+      callbacks?: {
+        beforeBody?: (items: unknown[]) => string[] | string;
+        label?: (ctx: unknown) => string;
+      };
+    };
+  };
+  scales: {
+    y: {
+      title: { text?: string };
+      stacked?: boolean;
+      suggestedMax?: number;
+    };
+  };
+};
+
+type ChartConfig = {
+  data: { datasets: ChartDataset[] };
+  options: ChartOptions;
+};
+
 function extractDashboardScript() {
   const html = DashboardPage().toString();
   const scripts = html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g);
@@ -16,15 +50,15 @@ function extractDashboardScript() {
 }
 
 function createDashboardHarness() {
-  const charts: any[] = [];
+  const charts: FakeChart[] = [];
   class FakeChart {
     canvas: unknown;
-    data: any;
-    options: any;
+    data: ChartConfig["data"];
+    options: ChartConfig["options"];
     visibility = new Map<number, boolean>();
     lastUpdateMode: string | null = null;
 
-    constructor(canvas: unknown, config: any) {
+    constructor(canvas: unknown, config: ChartConfig) {
       this.canvas = canvas;
       this.data = config.data;
       this.options = config.options;
@@ -88,6 +122,22 @@ function usageRecord(offsetHours: number, overrides: Record<string, unknown>) {
   };
 }
 
+function searchUsageRecord(
+  offsetHours: number,
+  overrides: Record<string, unknown>,
+) {
+  const date = new Date();
+  date.setHours(date.getHours() + offsetHours, 0, 0, 0);
+  return {
+    provider: "tavily",
+    hour: date.toISOString().slice(0, 13),
+    keyId: "key_1",
+    keyName: "Primary",
+    requests: 1,
+    ...overrides,
+  };
+}
+
 const TEST_USAGE_KEY_COLOR_ORDER = [
   "46360b74-2457-4a38-a116-7afdb2894632",
   "4969165b-3412-436c-87d9-3fd4770164b5",
@@ -120,6 +170,7 @@ Deno.test("DashboardPage renders the search section below the usage cards withou
   assertStringIncludes(html, "Microsoft Grounding");
   assertStringIncludes(html, "Save Search Config");
   assertStringIncludes(html, "Test Search");
+  assertStringIncludes(html, 'autocomplete="off"');
   assertStringIncludes(
     html,
     ":disabled=\"!searchConfigLoaded || searchConfigTesting || searchConfigDraft.provider === 'disabled'\"",
@@ -150,6 +201,16 @@ Deno.test("DashboardPage renders clickable usage summary metrics for chart axis 
   assertStringIncludes(html, "@click=\"switchTokenChartMetric('total')\"");
   assertStringIncludes(html, "@click=\"switchTokenChartMetric('input')\"");
   assertStringIncludes(html, "@click=\"switchTokenChartMetric('output')\"");
+  assertStringIncludes(html, "@click=\"switchTokenChartMetric('cached')\"");
+  assertStringIncludes(
+    html,
+    "@click=\"switchTokenChartMetric('cachedRate')\"",
+  );
+  assertStringIncludes(html, "@click=\"switchTokenChartMetric('prefill')\"");
+  assertStringIncludes(
+    html,
+    "@click=\"switchTokenChartMetric('prefillRate')\"",
+  );
   assertStringIncludes(
     html,
     "@click=\"switchTokenChartMetric('cacheCreation')\"",
@@ -158,7 +219,34 @@ Deno.test("DashboardPage renders clickable usage summary metrics for chart axis 
     html,
     "@click=\"switchTokenChartMetric('cacheHitRate')\"",
   );
+  assertStringIncludes(html, "Cached Input");
+  assertStringIncludes(html, "Cached Rate");
+  assertStringIncludes(html, "Prefill Input");
+  assertStringIncludes(html, "Prefill Rate");
+  assertStringIncludes(
+    html,
+    "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4",
+  );
+  assertEquals(
+    html.split('class="grid grid-cols-2 lg:grid-cols-1 gap-2"').length - 1,
+    5,
+  );
+  assertFalse(html.includes("grid grid-cols-2 md:grid-cols-5 gap-4"));
+  assert(html.indexOf("Cached Input") < html.indexOf("Prefill Input"));
+  assert(html.indexOf("Cached Rate") < html.indexOf("Prefill Rate"));
   assertStringIncludes(html, ":class=\"tokenChartMetric === 'total'");
+});
+
+Deno.test("DashboardPage renders cache and prefill tooltip columns without ratio", () => {
+  const html = DashboardPage().toString();
+
+  assertStringIncludes(html, "Cached%'.padStart(8)");
+  assertStringIncludes(html, "Prefill%'.padStart(8)");
+  assertStringIncludes(html, "Output'.padStart(7)");
+  assertStringIncludes(html, "Hit%'.padStart(7)");
+  assertFalse(html.includes("Ratio'.padStart"));
+  assertFalse(html.includes("renderInputOutputRatio"));
+  assertFalse(html.includes("Output%"));
 });
 
 Deno.test("DashboardPage does not embed production usage key ids in public HTML", () => {
@@ -178,24 +266,33 @@ Deno.test("DashboardPage preserves empty cache hit rate chart points", () => {
   );
   assertStringIncludes(
     html,
-    "return this.tokenChartMetric === 'cacheHitRate' ? null : 0;",
+    "return isTokenChartPercentMetric(this.tokenChartMetric) ? null : 0;",
   );
   assertStringIncludes(
     html,
-    "item.parsed.y !== null && (self.tokenChartMetric === 'cacheHitRate' || item.parsed.y > 0)",
+    "item.parsed.y !== null && (isSearchChart ? item.parsed.y > 0 : (isTokenChartPercentMetric(self.tokenChartMetric) || item.parsed.y > 0))",
   );
 });
 
-Deno.test("DashboardPage connects cache hit rate lines across empty points", () => {
+Deno.test("DashboardPage filters search usage tooltip items independently from token metric", () => {
   const html = DashboardPage().toString();
 
   assertStringIncludes(
     html,
-    "ds.spanGaps = metric === 'cacheHitRate';",
+    "filter: (item) => item.parsed.y !== null && (isSearchChart ? item.parsed.y > 0 : (isTokenChartPercentMetric(self.tokenChartMetric) || item.parsed.y > 0))",
+  );
+});
+
+Deno.test("DashboardPage connects percent metric lines across empty points", () => {
+  const html = DashboardPage().toString();
+
+  assertStringIncludes(
+    html,
+    "ds.spanGaps = isPercentMetric;",
   );
   assertStringIncludes(
     html,
-    "spanGaps: self.tokenChartMetric === 'cacheHitRate'",
+    "spanGaps: isTokenChartPercentMetric(self.tokenChartMetric)",
   );
 });
 
@@ -251,6 +348,59 @@ Deno.test("dashboardApp updates chart data and options when switching summary me
     assert(chart.data.datasets[0].data.includes(null));
   }
 
+  app.switchTokenChartMetric("cached");
+  assertEquals(app.tokenChartMetric, "cached");
+  for (const chart of charts) {
+    assertEquals(chart.options.scales.y.title.text, "Cached Input");
+    assertEquals(chart.options.scales.y.stacked, true);
+    assertEquals(chart.options.scales.y.suggestedMax, undefined);
+    assertEquals(chart.data.datasets[0].fill, "stack");
+    assertEquals(chart.data.datasets[0].spanGaps, false);
+    assertFalse(chart.data.datasets[0].data.includes(null));
+    assert(chart.data.datasets[0].data.includes(5));
+    assert(chart.data.datasets[0].data.includes(0));
+    assert(chart.data.datasets[0].data.includes(3));
+  }
+
+  app.switchTokenChartMetric("cachedRate");
+  assertEquals(app.tokenChartMetric, "cachedRate");
+  for (const chart of charts) {
+    assertEquals(chart.options.scales.y.title.text, "Cached Rate");
+    assertEquals(chart.options.scales.y.stacked, false);
+    assertEquals(chart.options.scales.y.suggestedMax, 100);
+    assertEquals(chart.data.datasets[0].fill, false);
+    assertEquals(chart.data.datasets[0].spanGaps, true);
+    assert(chart.data.datasets[0].data.includes(50));
+    assert(chart.data.datasets[0].data.includes(0));
+  }
+
+  app.switchTokenChartMetric("prefill");
+  assertEquals(app.tokenChartMetric, "prefill");
+  for (const chart of charts) {
+    assertEquals(chart.options.scales.y.title.text, "Prefill Input");
+    assertEquals(chart.options.scales.y.stacked, true);
+    assertEquals(chart.options.scales.y.suggestedMax, undefined);
+    assertEquals(chart.data.datasets[0].fill, "stack");
+    assertEquals(chart.data.datasets[0].spanGaps, false);
+    assertFalse(chart.data.datasets[0].data.includes(null));
+    assert(chart.data.datasets[0].data.includes(5));
+    assert(chart.data.datasets[0].data.includes(20));
+    assert(chart.data.datasets[0].data.includes(3));
+  }
+
+  app.switchTokenChartMetric("prefillRate");
+  assertEquals(app.tokenChartMetric, "prefillRate");
+  for (const chart of charts) {
+    assertEquals(chart.options.scales.y.title.text, "Prefill Rate");
+    assertEquals(chart.options.scales.y.stacked, false);
+    assertEquals(chart.options.scales.y.suggestedMax, 100);
+    assertEquals(chart.data.datasets[0].fill, false);
+    assertEquals(chart.data.datasets[0].spanGaps, true);
+    assert(chart.data.datasets[0].data.includes(50));
+    assert(chart.data.datasets[0].data.includes(100));
+    assert(chart.data.datasets[0].data.includes(50));
+  }
+
   app.switchTokenChartMetric("requests");
   assertEquals(app.tokenChartMetric, "requests");
   for (const chart of charts) {
@@ -264,6 +414,52 @@ Deno.test("dashboardApp updates chart data and options when switching summary me
     assert(chart.data.datasets[0].data.includes(3));
     assert(chart.data.datasets[0].data.includes(4));
   }
+});
+
+Deno.test("dashboardApp tooltip shows cached and prefill columns without ratio", () => {
+  const { app, charts } = createDashboardHarness();
+  app.tokenData = [
+    usageRecord(0, {
+      requests: 2,
+      inputTokens: 100,
+      outputTokens: 20,
+      cacheReadTokens: 30,
+      cacheCreationTokens: 10,
+    }),
+  ];
+
+  app.renderTokenCharts();
+
+  const chart = charts[0];
+  const dataset = chart.data.datasets[0];
+  const dataIndex = dataset.data.findIndex((v) => v === 120);
+  assert(dataIndex >= 0);
+
+  const callbacks = chart.options.plugins?.tooltip?.callbacks;
+  assert(callbacks?.beforeBody);
+  assert(callbacks?.label);
+
+  const header = callbacks.beforeBody([{ chart }]);
+  const row = callbacks.label({
+    chart,
+    dataIndex,
+    dataset,
+    parsed: { y: 120 },
+  });
+
+  assertStringIncludes(String(header), "Cached%");
+  assertStringIncludes(String(header), "Prefill%");
+  assertStringIncludes(String(header), "Output");
+  assertStringIncludes(String(header), "Hit%");
+  assertFalse(String(header).includes("Ratio"));
+  assertStringIncludes(row, "120");
+  assertStringIncludes(row, "30");
+  assertStringIncludes(row, "30.0%");
+  assertStringIncludes(row, "70");
+  assertStringIncludes(row, "70.0%");
+  assertStringIncludes(row, "20");
+  assertFalse(row.includes("5.00x"));
+  assertStringIncludes(row, "75.0%");
 });
 
 Deno.test("dashboardApp keeps known usage key colors on selected slots when earlier keys are absent", () => {
@@ -285,12 +481,14 @@ Deno.test("dashboardApp keeps known usage key colors on selected slots when earl
   app.renderTokenCharts();
 
   const keyChart = charts[0];
-  const menci = keyChart.data.datasets.find((ds: any) =>
+  const menci = keyChart.data.datasets.find((ds: ChartDataset) =>
     ds._keyId === "4969165b-3412-436c-87d9-3fd4770164b5"
   );
-  const ceerRep = keyChart.data.datasets.find((ds: any) =>
+  const ceerRep = keyChart.data.datasets.find((ds: ChartDataset) =>
     ds._keyId === "3f2fe5b9-2991-4bb8-bc04-2852f58150ca"
   );
+  assert(menci);
+  assert(ceerRep);
   assertEquals(menci.borderColor, "#00e676");
   assertEquals(menci.backgroundColor, "#00e67640");
   assertEquals(ceerRep.borderColor, "#64ffda");
@@ -322,7 +520,10 @@ Deno.test("dashboardApp assigns new usage keys to reordered future color slots b
 
   const keyChart = charts[0];
   const colorsByKey = new Map(
-    keyChart.data.datasets.map((ds: any) => [ds._keyId, ds.borderColor]),
+    keyChart.data.datasets.map((ds: ChartDataset) => [
+      ds._keyId,
+      ds.borderColor,
+    ]),
   );
   assertEquals(colorsByKey.get("new-key-1"), "#ff6e40");
   assertEquals(colorsByKey.get("new-key-2"), "#40c4ff");
@@ -425,43 +626,81 @@ Deno.test("dashboardApp aligns dotted Claude usage IDs with dashed model metadat
   assertEquals(modelChart.data.datasets[0].backgroundColor, "#00e67640");
 });
 
-Deno.test("dashboardApp reapplies known model-id color slots when model metadata finishes loading", async () => {
+Deno.test("dashboardApp waits for model metadata before first usage chart render", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = () =>
-    Promise.resolve(
-      new Response(
-        JSON.stringify({
-          data: [
-            {
-              id: "model-a",
-              name: "Model A",
-              model_picker_enabled: true,
-              capabilities: {},
-              supported_endpoints: [],
-            },
-            {
-              id: "model-b",
-              name: "Model B",
-              model_picker_enabled: true,
-              capabilities: {},
-              supported_endpoints: [],
-            },
-          ],
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
+  let resolveModels!: () => void;
+  const modelsResponse = new Promise<Response>((resolve) => {
+    resolveModels = () =>
+      resolve(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "model-a",
+                name: "Model A",
+                model_picker_enabled: true,
+                capabilities: {},
+                supported_endpoints: [],
+              },
+              {
+                id: "model-b",
+                name: "Model B",
+                model_picker_enabled: true,
+                capabilities: {},
+                supported_endpoints: [],
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+  });
+
+  globalThis.fetch = (input) => {
+    const url = String(input);
+    if (url.startsWith("/api/models")) return modelsResponse;
+    if (url.startsWith("/api/token-usage")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            records: [usageRecord(0, { model: "model-b" })],
+            keys: [],
+            keyColorOrder: [],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    }
+    if (url.startsWith("/api/search-usage")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            records: [],
+            keys: [],
+            keyColorOrder: [],
+            activeProvider: "disabled",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  };
 
   try {
     const { app, charts } = createDashboardHarness();
     app.$nextTick = () => Promise.resolve();
-    app.tokenData = [usageRecord(0, { model: "model-b" })];
-    app.renderTokenCharts();
-    assertEquals(charts[1].data.datasets[0].borderColor, "#00e5ff");
+    const usageReady = app.loadUsageTabData(app.loadModels());
 
-    await app.loadModels();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assertEquals(app.tokenLoading, true);
+    assertEquals(charts.length, 0);
+
+    resolveModels();
+    await usageReady;
 
     const modelChart = charts.at(-1);
+    assert(modelChart);
     assertEquals(modelChart.data.datasets[0]._model, "model-b");
     assertEquals(modelChart.data.datasets[0].borderColor, "#00e676");
   } finally {
@@ -477,4 +716,114 @@ Deno.test("DashboardPage usage summary metric focus styling only shows borders o
     "border border-transparent cursor-pointer transition-colors hover:border-white/10 focus:outline-none focus-visible:border-accent-cyan/40",
   );
   assertFalse(html.includes("focus:ring"));
+});
+
+Deno.test("DashboardPage renders mobile-friendly dashboard chrome", () => {
+  const html = DashboardPage().toString();
+
+  assertStringIncludes(html, "max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-5 pb-8");
+  assertStringIncludes(
+    html,
+    "order-3 flex w-full max-w-full gap-1 overflow-x-auto rounded-lg bg-surface-800 p-0.5 sm:order-none sm:w-fit",
+  );
+  assertStringIncludes(
+    html,
+    "shrink-0 px-2 py-2 rounded-md text-xs font-medium transition-all sm:px-4 sm:text-sm",
+  );
+});
+
+Deno.test("DashboardPage renders mobile-friendly admin controls", () => {
+  const html = DashboardPage().toString();
+
+  assertStringIncludes(
+    html,
+    "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center",
+  );
+  assertStringIncludes(html, "aria-label=\"Copy API key\"");
+  assertStringIncludes(html, "aria-label=\"Rename API key\"");
+  assertStringIncludes(html, "aria-label=\"Rotate API key\"");
+  assertStringIncludes(html, "aria-label=\"Delete API key\"");
+  assertStringIncludes(html, "min-h-9 min-w-9");
+});
+
+Deno.test("DashboardPage renders Settings import preview responsively", () => {
+  const html = DashboardPage().toString();
+
+  assertStringIncludes(html, "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4");
+  assertStringIncludes(html, "flex flex-col gap-3 mb-4 sm:flex-row");
+  assertFalse(html.includes("grid grid-cols-4 gap-3 mb-4"));
+});
+
+Deno.test("DashboardPage renders Models playground as a mobile stack", () => {
+  const html = DashboardPage().toString();
+
+  assertStringIncludes(
+    html,
+    "glass-card glow-border animate-in flex h-[calc(100dvh-130px)] min-h-[560px] flex-col overflow-hidden lg:h-[calc(100vh-140px)] lg:flex-row",
+  );
+  assertStringIncludes(
+    html,
+    "max-h-56 w-full shrink-0 border-b border-white/[0.06] flex flex-col lg:max-h-none lg:w-72 lg:border-b-0 lg:border-r",
+  );
+  assertFalse(
+    html.includes('style="height: calc(100vh - 140px); display: flex; overflow: hidden;"'),
+  );
+});
+
+Deno.test("DashboardPage renders search usage chart after token summary content", () => {
+  const html = DashboardPage().toString();
+
+  assertStringIncludes(html, "Search Usage — Per Key");
+  assertStringIncludes(html, "searchUsageActiveProvider !== 'disabled'");
+  assertStringIncludes(html, "searchUsageChartByKey");
+  assert(
+    html.indexOf("Search Usage — Per Key") > html.indexOf("Cache Hit Rate"),
+  );
+});
+
+Deno.test("DashboardPage import preview includes search usage records", () => {
+  const html = DashboardPage().toString();
+
+  assertStringIncludes(html, "searchUsage: 0");
+  assertStringIncludes(
+    html,
+    "searchUsage: Array.isArray(json.data.searchUsage) ? json.data.searchUsage.length : 0",
+  );
+  assertStringIncludes(html, "Search Usage Records");
+  assertStringIncludes(html, 'x-text="importPreview.searchUsage"');
+  assertStringIncludes(
+    html,
+    "result.imported.searchUsage + ' search usage records'",
+  );
+});
+
+Deno.test("dashboardApp renders search usage per-key datasets for active provider only", () => {
+  const { app, charts } = createDashboardHarness();
+  app.searchUsageActiveProvider = "tavily";
+  app.searchUsageData = [
+    searchUsageRecord(-1, {
+      provider: "tavily",
+      keyId: "key-a",
+      keyName: "Search A",
+      requests: 5,
+    }),
+    searchUsageRecord(0, {
+      provider: "microsoft-grounding",
+      keyId: "key-b",
+      keyName: "Search B",
+      requests: 7,
+    }),
+  ];
+
+  app.renderTokenCharts();
+
+  const searchKeyChart = charts.find((chart) =>
+    (chart.canvas as { id?: string }).id === "searchUsageChartByKey"
+  );
+  assert(searchKeyChart);
+  assertEquals(searchKeyChart.data.datasets.length, 1);
+  assertEquals(searchKeyChart.data.datasets[0]._keyId, "key-a");
+  assertEquals(searchKeyChart.data.datasets[0].label, "Search A");
+  assert(searchKeyChart.data.datasets[0].data.includes(5));
+  assertFalse(searchKeyChart.data.datasets[0].data.includes(7));
 });

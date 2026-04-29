@@ -10,20 +10,24 @@ import type {
   MessagesUserContentBlock,
 } from "../../../../../lib/messages-types.ts";
 import {
-  collectMessagesEventsToResponse,
-  expandMessagesFrames,
-  messagesResponseToSSEFrames,
-} from "../../../sources/messages/collect/from-events.ts";
-import { collectSSE } from "../../../shared/stream/collect-sse.ts";
+  collectMessagesProtocolEventsToResponse,
+} from "../../../sources/messages/events/to-response.ts";
+import {
+  messagesProtocolEventsToSSEFrames,
+  messagesProtocolEventToSSEFrame,
+} from "../../../sources/messages/events/to-sse.ts";
 import { type WebSearchProvider } from "../../../../tools/web-search/provider.ts";
 import { DEFAULT_SEARCH_CONFIG } from "../../../../tools/web-search/search-config.ts";
-import type {
-  SearchConfig,
-  WebSearchProviderResult,
-} from "../../../../tools/web-search/types.ts";
+import type { WebSearchProviderResult } from "../../../../tools/web-search/types.ts";
 import { InMemoryRepo } from "../../../../../repo/memory.ts";
 import { initRepo } from "../../../../../repo/index.ts";
-import { jsonFrame } from "../../../shared/stream/types.ts";
+import {
+  jsonFrame,
+  type SseFrame,
+  type StreamFrame,
+} from "../../../shared/stream/types.ts";
+import { messagesResultToEvents } from "../events/from-result.ts";
+import { messagesStreamFramesToEvents } from "../events/from-stream.ts";
 import {
   collectAndRewriteMessagesWebSearchEventsToNative,
   decodeWebSearchCitationPayload,
@@ -97,12 +101,6 @@ const makeNativeReplayPayload = (): MessagesPayload => ({
   ],
 });
 
-const activeSearchConfig: SearchConfig = {
-  provider: "tavily",
-  tavily: { apiKey: "tvly-test" },
-  microsoftGrounding: { apiKey: "" },
-};
-
 const activeMessagesWebSearchShimState = (
   overrides: Partial<Extract<MessagesWebSearchShimState, { mode: "active" }>> =
     {},
@@ -136,20 +134,31 @@ const makeUpstreamToolUseResponse = (
   })),
 });
 
-const fakeProviderOk: WebSearchProvider = async () => ({
-  type: "ok",
-  results: [{
-    source: "https://react.dev",
-    title: "React",
-    pageAge: "2026-04-01",
-    content: [{ type: "text", text: "Official React docs" }],
-  }],
-});
+const fakeProviderOk: WebSearchProvider = () =>
+  Promise.resolve({
+    type: "ok",
+    results: [{
+      source: "https://react.dev",
+      title: "React",
+      pageAge: "2026-04-01",
+      content: [{ type: "text", text: "Official React docs" }],
+    }],
+  });
+
+const activeProvider = (
+  search: WebSearchProvider,
+  apiKeyId?: string,
+) =>
+  Object.assign(search, {
+    providerName: "tavily" as const,
+    search,
+    ...(apiKeyId ? { apiKeyId } : {}),
+  });
 
 const fakeProviderError = (
   errorCode: Extract<WebSearchProviderResult, { type: "error" }>["errorCode"],
 ): WebSearchProvider =>
-async () => ({ type: "error", errorCode });
+() => Promise.resolve({ type: "error", errorCode });
 
 const toAsyncIterable = async function* <T>(
   values: Iterable<T>,
@@ -158,6 +167,30 @@ const toAsyncIterable = async function* <T>(
     yield value;
   }
 };
+
+const collect = async <T>(events: AsyncIterable<T>): Promise<T[]> => {
+  const collected: T[] = [];
+
+  for await (const event of events) {
+    collected.push(event);
+  }
+
+  return collected;
+};
+
+const messagesResponseToSSEFrames = (
+  response: MessagesResponse,
+): SseFrame[] =>
+  messagesResultToEvents(response).map((frame) =>
+    messagesProtocolEventToSSEFrame(frame.event)
+  );
+
+const collectRawMessagesFramesToResponse = async (
+  frames: AsyncIterable<StreamFrame<MessagesResponse>>,
+): Promise<MessagesResponse> =>
+  await collectMessagesProtocolEventsToResponse(
+    messagesStreamFramesToEvents(frames),
+  );
 
 Deno.test("web search shim payload codecs use minimal cgws1 payloads", () => {
   const encryptedContent = encodeWebSearchResultPayload({
@@ -493,6 +526,9 @@ Deno.test("prepareMessagesWebSearchShimRequest creates a separate user tool_resu
 });
 
 Deno.test("rewriteMessagesWebSearchResponseToNative converts pure web_search tool_use into pause_turn", async () => {
+  const repo = new InMemoryRepo();
+  initRepo(repo);
+
   const rewritten = await rewriteMessagesWebSearchResponseToNative(
     makeUpstreamToolUseResponse([{
       name: "web_search",
@@ -500,7 +536,7 @@ Deno.test("rewriteMessagesWebSearchResponseToNative converts pure web_search too
       input: { query: "latest React docs" },
     }]),
     activeMessagesWebSearchShimState(),
-    fakeProviderOk,
+    activeProvider(fakeProviderOk, "key_usage"),
   );
 
   assertEquals(rewritten.stop_reason, "pause_turn");
@@ -511,6 +547,12 @@ Deno.test("rewriteMessagesWebSearchResponseToNative converts pure web_search too
     { type: "direct" },
   );
   assertEquals(rewritten.usage.server_tool_use?.web_search_requests, 1);
+  assertEquals(await repo.searchUsage.listAll(), [{
+    provider: "tavily",
+    keyId: "key_usage",
+    hour: new Date().toISOString().slice(0, 13),
+    requests: 1,
+  }]);
 });
 
 Deno.test("rewriteMessagesWebSearchResponseToNative keeps remaining client tool_use in mixed turn", async () => {
@@ -524,7 +566,7 @@ Deno.test("rewriteMessagesWebSearchResponseToNative keeps remaining client tool_
       { name: "calc", id: "toolu_2", input: { expression: "2+2" } },
     ]),
     activeMessagesWebSearchShimState(),
-    fakeProviderOk,
+    activeProvider(fakeProviderOk),
   );
 
   assertEquals(rewritten.stop_reason, "tool_use");
@@ -543,6 +585,8 @@ Deno.test("rewriteMessagesWebSearchResponseToNative keeps remaining client tool_
 });
 
 Deno.test("rewriteMessagesWebSearchResponseToNative synthesizes max_uses_exceeded without calling the provider", async () => {
+  const repo = new InMemoryRepo();
+  initRepo(repo);
   let called = false;
 
   const rewritten = await rewriteMessagesWebSearchResponseToNative(
@@ -552,13 +596,13 @@ Deno.test("rewriteMessagesWebSearchResponseToNative synthesizes max_uses_exceede
       input: { query: "latest React docs" },
     }]),
     activeMessagesWebSearchShimState({ maxUses: 1, priorSearchUseCount: 1 }),
-    async () => {
+    activeProvider(() => {
       called = true;
-      return {
+      return Promise.resolve({
         type: "ok",
         results: [],
-      };
-    },
+      });
+    }, "key_usage"),
   );
 
   assertEquals(called, false);
@@ -572,6 +616,7 @@ Deno.test("rewriteMessagesWebSearchResponseToNative synthesizes max_uses_exceede
     },
   });
   assertEquals(rewritten.usage.server_tool_use, undefined);
+  assertEquals(await repo.searchUsage.listAll(), []);
 });
 
 Deno.test("rewriteMessagesWebSearchResponseToNative maps provider errors into native-looking tool-result errors", async () => {
@@ -582,7 +627,7 @@ Deno.test("rewriteMessagesWebSearchResponseToNative maps provider errors into na
       input: { query: "latest React docs" },
     }]),
     activeMessagesWebSearchShimState(),
-    fakeProviderError("too_many_requests"),
+    activeProvider(fakeProviderError("too_many_requests")),
   );
 
   assertEquals(rewritten.content[1], {
@@ -598,6 +643,9 @@ Deno.test("rewriteMessagesWebSearchResponseToNative maps provider errors into na
 });
 
 Deno.test("rewriteMessagesWebSearchResponseToNative uses invalid_tool_input for blank queries", async () => {
+  const repo = new InMemoryRepo();
+  initRepo(repo);
+
   const rewritten = await rewriteMessagesWebSearchResponseToNative(
     makeUpstreamToolUseResponse([{
       name: "web_search",
@@ -605,7 +653,7 @@ Deno.test("rewriteMessagesWebSearchResponseToNative uses invalid_tool_input for 
       input: { query: "   " },
     }]),
     activeMessagesWebSearchShimState(),
-    fakeProviderOk,
+    activeProvider(fakeProviderOk, "key_usage"),
   );
 
   assertEquals(rewritten.content[1], {
@@ -618,6 +666,34 @@ Deno.test("rewriteMessagesWebSearchResponseToNative uses invalid_tool_input for 
     },
   });
   assertEquals(rewritten.stop_reason, "pause_turn");
+  assertEquals(await repo.searchUsage.listAll(), []);
+});
+
+Deno.test("rewriteMessagesWebSearchResponseToNative uses query_too_long without recording usage", async () => {
+  const repo = new InMemoryRepo();
+  initRepo(repo);
+
+  const rewritten = await rewriteMessagesWebSearchResponseToNative(
+    makeUpstreamToolUseResponse([{
+      name: "web_search",
+      id: "toolu_1",
+      input: { query: "x".repeat(1001) },
+    }]),
+    activeMessagesWebSearchShimState(),
+    activeProvider(fakeProviderOk, "key_usage"),
+  );
+
+  assertEquals(rewritten.content[1], {
+    type: "web_search_tool_result",
+    tool_use_id: "srvtoolu_1",
+    caller: { type: "direct" },
+    content: {
+      type: "web_search_tool_result_error",
+      error_code: "query_too_long",
+    },
+  });
+  assertEquals(rewritten.stop_reason, "pause_turn");
+  assertEquals(await repo.searchUsage.listAll(), []);
 });
 
 Deno.test("rewriteMessagesWebSearchResponseToNative forwards only definition-level domain policy to the provider", async () => {
@@ -641,17 +717,17 @@ Deno.test("rewriteMessagesWebSearchResponseToNative forwards only definition-lev
       allowedDomains: ["react.dev"],
       blockedDomains: ["example.com"],
     }),
-    async (request) => {
+    activeProvider((request) => {
       providerRequest = {
         query: request.query,
         allowedDomains: request.allowedDomains,
         blockedDomains: request.blockedDomains,
       };
-      return {
+      return Promise.resolve({
         type: "ok",
         results: [],
-      };
-    },
+      });
+    }),
   );
 
   assertEquals(providerRequest, {
@@ -679,10 +755,10 @@ Deno.test("rewriteMessagesWebSearchResponseToNative counts thrown provider attem
       },
     ]),
     activeMessagesWebSearchShimState({ maxUses: 1 }),
-    async () => {
+    activeProvider(() => {
       callCount += 1;
-      throw new Error("provider exploded");
-    },
+      return Promise.reject(new Error("provider exploded"));
+    }),
   );
 
   assertEquals(callCount, 1);
@@ -745,7 +821,7 @@ Deno.test("rewriteMessagesWebSearchResponseToNative rewrites search_result_locat
     activeMessagesWebSearchShimState({
       requestSearchResultOwnership: ["owned", "foreign"],
     }),
-    fakeProviderOk,
+    activeProvider(fakeProviderOk),
   );
 
   const textBlock = rewritten.content[0] as MessagesTextBlock;
@@ -765,10 +841,10 @@ Deno.test("collectAndRewriteMessagesWebSearchEventsToNative rewrites collected S
       ),
     ),
     activeMessagesWebSearchShimState(),
-    fakeProviderOk,
+    activeProvider(fakeProviderOk),
   );
 
-  const rewritten = await collectMessagesEventsToResponse(frames);
+  const rewritten = await collectRawMessagesFramesToResponse(frames);
 
   assertEquals(rewritten.stop_reason, "pause_turn");
   assertEquals(rewritten.content[0].type, "server_tool_use");
@@ -799,13 +875,13 @@ Deno.test("rewriteMessagesWebSearchResponseToNative preserves user-defined web_s
   const rewritten = await rewriteMessagesWebSearchResponseToNative(
     upstreamResponse,
     prepared.state,
-    async () => {
+    activeProvider(() => {
       called = true;
-      return {
+      return Promise.resolve({
         type: "ok",
         results: [],
-      };
-    },
+      });
+    }),
   );
 
   assertEquals(called, false);
@@ -827,9 +903,7 @@ Deno.test("withMessagesWebSearchShim returns internal-error when request require
     },
     githubToken: "ghu_test",
     accountType: "individual",
-  }, async () => {
-    throw new Error("run should not be called");
-  });
+  }, () => Promise.reject(new Error("run should not be called")));
 
   assertEquals(result.type, "internal-error");
 });
@@ -846,38 +920,39 @@ Deno.test("withMessagesWebSearchShim allows replay-only history when the search 
     payload,
     githubToken: "ghu_test",
     accountType: "individual",
-  }, async () => ({
-    type: "events",
-    events: toAsyncIterable([
-      jsonFrame<MessagesResponse>({
-        id: "msg_replay_only",
-        type: "message",
-        role: "assistant",
-        model: "claude-test",
-        stop_reason: "end_turn",
-        stop_sequence: null,
-        usage: { input_tokens: 10, output_tokens: 1 },
-        content: [{
-          type: "text",
-          text: "Use the docs.",
-          citations: [{
-            type: "search_result_location",
-            url: "https://react.dev",
-            title: "React",
-            search_result_index: 0,
-            start_block_index: 0,
-            end_block_index: 0,
-            cited_text: "Official React documentation",
+  }, () =>
+    Promise.resolve({
+      type: "events",
+      events: toAsyncIterable([
+        jsonFrame<MessagesResponse>({
+          id: "msg_replay_only",
+          type: "message",
+          role: "assistant",
+          model: "claude-test",
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: { input_tokens: 10, output_tokens: 1 },
+          content: [{
+            type: "text",
+            text: "Use the docs.",
+            citations: [{
+              type: "search_result_location",
+              url: "https://react.dev",
+              title: "React",
+              search_result_index: 0,
+              start_block_index: 0,
+              end_block_index: 0,
+              cited_text: "Official React documentation",
+            }],
           }],
-        }],
-      }),
-    ]),
-  }));
+        }),
+      ]),
+    }));
 
   assertEquals(result.type, "events");
   if (result.type !== "events") throw new Error("expected events result");
 
-  const rewritten = await collectMessagesEventsToResponse(result.events);
+  const rewritten = await collectRawMessagesFramesToResponse(result.events);
   const textBlock = rewritten.content[0] as MessagesTextBlock;
   assertEquals(textBlock.citations?.[0]?.type, "web_search_result_location");
 });
@@ -894,38 +969,43 @@ Deno.test("withMessagesWebSearchShim emits native-like citation deltas for repla
     payload,
     githubToken: "ghu_test",
     accountType: "individual",
-  }, async () => ({
-    type: "events",
-    events: toAsyncIterable([
-      jsonFrame<MessagesResponse>({
-        id: "msg_replay_only_stream",
-        type: "message",
-        role: "assistant",
-        model: "claude-test",
-        stop_reason: "end_turn",
-        stop_sequence: null,
-        usage: { input_tokens: 10, output_tokens: 1 },
-        content: [{
-          type: "text",
-          text: "Use the docs.",
-          citations: [{
-            type: "search_result_location",
-            url: "https://react.dev",
-            title: "React",
-            search_result_index: 0,
-            start_block_index: 0,
-            end_block_index: 0,
-            cited_text: "Official React documentation",
+  }, () =>
+    Promise.resolve({
+      type: "events",
+      events: toAsyncIterable([
+        jsonFrame<MessagesResponse>({
+          id: "msg_replay_only_stream",
+          type: "message",
+          role: "assistant",
+          model: "claude-test",
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: { input_tokens: 10, output_tokens: 1 },
+          content: [{
+            type: "text",
+            text: "Use the docs.",
+            citations: [{
+              type: "search_result_location",
+              url: "https://react.dev",
+              title: "React",
+              search_result_index: 0,
+              start_block_index: 0,
+              end_block_index: 0,
+              cited_text: "Official React documentation",
+            }],
           }],
-        }],
-      }),
-    ]),
-  }));
+        }),
+      ]),
+    }));
 
   assertEquals(result.type, "events");
   if (result.type !== "events") throw new Error("expected events result");
 
-  const frames = await collectSSE(expandMessagesFrames(result.events));
+  const frames = await collect(
+    messagesProtocolEventsToSSEFrames(
+      messagesStreamFramesToEvents(result.events),
+    ),
+  );
   const citationFrame = frames.find((frame) => {
     if (frame.type !== "sse" || frame.event !== "content_block_delta") {
       return false;

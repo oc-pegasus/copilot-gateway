@@ -164,6 +164,8 @@ Do not introduce a canonical internal IR for requests.
 - Response handling is event-first.
 - Non-stream client responses should be assembled from source-shaped event
   streams whenever practical.
+- See `TRANSLATION.md` for per-path field mapping, known losses, and boundary
+  rules.
 
 ### Contract Stability
 
@@ -247,6 +249,7 @@ Current placement:
     `invalid_request_error` envelope expected by Messages clients
 - `src/data-plane/llm/sources/responses/normalize/`
   - rewrite `apply_patch` from `custom` to `function`
+  - remove unsupported `image_generation` tools and forced tool choices
 - `src/data-plane/llm/targets/messages/interceptors/filter-invalid-thinking-blocks.ts`
   - filter invalid thinking blocks
 - `src/data-plane/llm/targets/messages/interceptors/fix-beta-header.ts`
@@ -262,12 +265,16 @@ Current placement:
   - strip unsupported `service_tier`
 - `src/data-plane/llm/targets/messages/interceptors/strip-done-sentinel.ts`
   - strip stray `[DONE]` sentinels
+- `src/data-plane/llm/targets/responses/interceptors/strip-service-tier.ts`
+  - strip unsupported `service_tier`
 - `src/data-plane/llm/targets/responses/interceptors/retry-connection-mismatch.ts`
   - detect expired connection-bound input IDs
   - deterministically rewrite IDs
   - retry once
 - `src/data-plane/llm/targets/responses/interceptors/synchronize-output-item-ids.ts`
   - synchronize mismatched stream item IDs
+- `src/data-plane/llm/targets/chat-completions/interceptors/strip-service-tier.ts`
+  - strip unsupported `service_tier`
 - `src/data-plane/llm/targets/chat-completions/interceptors/include-usage-stream-options.ts`
   - ensure streaming usage options needed by native chat handling
 - `src/data-plane/llm/targets/chat-completions/interceptors/fix-claude-choice-shape.ts`

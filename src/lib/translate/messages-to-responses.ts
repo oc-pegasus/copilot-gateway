@@ -1,11 +1,9 @@
 import {
   MESSAGES_THINKING_PLACEHOLDER,
-  type MessagesAssistantContentBlock,
   type MessagesAssistantMessage,
   type MessagesClientTool,
   type MessagesMessage,
   type MessagesPayload,
-  type MessagesRedactedThinkingBlock,
   type MessagesResponse,
   type MessagesServerToolUseBlock,
   type MessagesTextBlock,
@@ -114,6 +112,9 @@ const translateUserMessage = (
 
   for (const block of message.content) {
     if (block.type === "tool_result") {
+      // Responses can represent alternating user content and tool outputs, so
+      // preserve Messages block chronology instead of moving all tool results to
+      // the front of the turn.
       flushPendingContent(pendingContent, input, "user");
       input.push({
         type: "function_call_output",
@@ -180,7 +181,7 @@ const translateAssistantMessage = (
         type: "reasoning",
         id: makeResponsesReasoningId(input.length),
         summary: [],
-        encrypted_content: (block as MessagesRedactedThinkingBlock).data,
+        encrypted_content: block.data,
       });
       continue;
     }
@@ -209,7 +210,9 @@ const translateSystemPrompt = (
   if (typeof system === "string") return system;
   if (!system) return null;
 
-  const text = system.map((block) => block.text).join(" ");
+  // Messages system blocks are prompt boundaries. Keep paragraph separation on
+  // OpenAI fallbacks instead of collapsing headings or lists with spaces.
+  const text = system.map((block) => block.text).join("\n\n");
   return text.length > 0 ? text : null;
 };
 
@@ -222,6 +225,8 @@ const translateTools = (
     type: "function",
     name: tool.name,
     parameters: tool.input_schema,
+    // Responses tools default stricter than Anthropic/Chat-style function tools,
+    // so omitted source strictness is made explicit as false.
     strict: tool.strict ?? false,
     ...(tool.description ? { description: tool.description } : {}),
   }));
@@ -263,26 +268,33 @@ export const translateMessagesToResponses = (
   // Responses upstream may reject it. Translation stays pairwise and leaves
   // target-side validation to the selected upstream endpoint.
   const effort = getMessagesRequestedReasoningEffort(payload);
-  const reasoning = effort
-    ? { effort, summary: "detailed" as const }
-    : undefined;
+  const reasoning = effort ? { effort } : undefined;
   const clientTools = getClientTools(payload.tools);
+  const instructions = translateSystemPrompt(payload.system);
 
+  // Keep fallback semantics strict: do not synthesize `temperature: 1`,
+  // `store: false`, `parallel_tool_calls: true`, or `reasoning.summary` when the
+  // Messages source did not express those knobs.
   return {
     model: payload.model,
     input: payload.messages.length === 0
       ? []
       : translateMessagesInput(payload.messages),
-    instructions: translateSystemPrompt(payload.system),
-    temperature: 1,
-    top_p: payload.top_p ?? null,
+    ...(instructions !== null ? { instructions } : {}),
+    ...(payload.temperature !== undefined
+      ? { temperature: payload.temperature }
+      : {}),
+    ...(payload.top_p !== undefined ? { top_p: payload.top_p } : {}),
     max_output_tokens: payload.max_tokens,
-    tools: translateTools(clientTools),
+    ...(payload.tools !== undefined
+      ? { tools: translateTools(clientTools) }
+      : {}),
     tool_choice: translateToolChoice(payload.tool_choice, clientTools),
-    metadata: payload.metadata ? { ...payload.metadata } : null,
-    stream: payload.stream ?? null,
-    store: false,
-    parallel_tool_calls: true,
+    ...(payload.metadata ? { metadata: { ...payload.metadata } } : {}),
+    ...(payload.stream !== undefined ? { stream: payload.stream } : {}),
+    // Preserve opaque reasoning across translated multi-turn requests without
+    // turning on Responses summaries when the Messages source did not ask for
+    // readable reasoning output.
     ...(reasoning
       ? { reasoning, include: ["reasoning.encrypted_content"] }
       : {}),
@@ -293,9 +305,11 @@ export const translateMessagesToResponsesResult = (
   response: MessagesResponse,
 ): ResponsesResult => {
   const output: ResponseOutputItem[] = [];
-  const textParts: string[] = [];
-  const preservedUnsupportedHistory: MessagesAssistantContentBlock[] = [];
+  let outputText = "";
 
+  // Responses `output[]` can express ordered mixed reasoning/text/tool items, so
+  // the non-stream result follows source block order instead of merging all text
+  // into one trailing assistant message.
   for (const block of response.content) {
     switch (block.type) {
       case "thinking": {
@@ -320,11 +334,16 @@ export const translateMessagesToResponsesResult = (
           type: "reasoning",
           id: makeResponsesReasoningId(output.length),
           summary: [],
-          encrypted_content: (block as MessagesRedactedThinkingBlock).data,
+          encrypted_content: block.data,
         } as ResponseOutputReasoning);
         break;
       case "text":
-        textParts.push(block.text);
+        outputText += block.text;
+        output.push({
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: block.text }],
+        } as ResponseOutputMessage);
         break;
       case "tool_use":
         output.push({
@@ -337,24 +356,8 @@ export const translateMessagesToResponsesResult = (
         break;
       case "server_tool_use":
       case "web_search_tool_result":
-        preservedUnsupportedHistory.push(block);
         break;
     }
-  }
-
-  const outputText = [
-    preservedUnsupportedHistory.length > 0
-      ? JSON.stringify(preservedUnsupportedHistory)
-      : "",
-    textParts.join(""),
-  ].filter((part) => part.length > 0).join("\n\n");
-
-  if (outputText.length > 0) {
-    output.push({
-      type: "message",
-      role: "assistant",
-      content: [{ type: "output_text", text: outputText }],
-    } as ResponseOutputMessage);
   }
 
   const inputTokens = response.usage.input_tokens +

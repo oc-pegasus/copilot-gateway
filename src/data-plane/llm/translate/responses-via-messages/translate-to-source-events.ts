@@ -1,47 +1,35 @@
 import type {
-  MessagesResponse,
   MessagesStreamEventData,
 } from "../../../../lib/messages-types.ts";
-import type { ResponsesResult } from "../../../../lib/responses-types.ts";
-import { translateMessagesToResponsesResult } from "../../../../lib/translate/messages-to-responses.ts";
 import {
   createMessagesToResponsesStreamState,
   translateMessagesEventToResponsesEvents,
 } from "../../../../lib/translate/messages-to-responses-stream.ts";
-import {
-  jsonFrame,
-  sseFrame,
-  type StreamFrame,
-} from "../../shared/stream/types.ts";
+import { protocolEventsUntilTerminal } from "../../shared/stream/protocol-algebra.ts";
+import { eventFrame, type ProtocolFrame } from "../../shared/stream/types.ts";
+import type { SourceResponseStreamEvent } from "../../sources/responses/events/protocol.ts";
+import { upstreamMessagesStreamAlgebra } from "../upstream-protocol.ts";
 
 export const translateToSourceEvents = async function* (
-  frames: AsyncIterable<StreamFrame<MessagesResponse>>,
+  frames: AsyncIterable<ProtocolFrame<MessagesStreamEventData>>,
   responseId: string,
   model: string,
-): AsyncGenerator<StreamFrame<ResponsesResult>> {
+): AsyncGenerator<ProtocolFrame<SourceResponseStreamEvent>> {
   const state = createMessagesToResponsesStreamState(responseId, model);
 
-  for await (const frame of frames) {
-    if (frame.type === "json") {
-      yield jsonFrame(translateMessagesToResponsesResult(frame.data));
-      continue;
-    }
-
-    const data = frame.data.trim();
-    if (!data || data === "[DONE]") continue;
-
-    let event: MessagesStreamEventData;
-
-    try {
-      event = JSON.parse(data) as MessagesStreamEventData;
-    } catch {
-      continue;
-    }
-
+  for await (
+    const event of protocolEventsUntilTerminal(
+      frames,
+      upstreamMessagesStreamAlgebra,
+    )
+  ) {
     for (
-      const translated of translateMessagesEventToResponsesEvents(event, state)
+      const translated of translateMessagesEventToResponsesEvents(
+        event,
+        state,
+      )
     ) {
-      yield sseFrame(JSON.stringify(translated), translated.type);
+      yield eventFrame(translated);
     }
   }
 };

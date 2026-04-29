@@ -1,12 +1,31 @@
-import { assertEquals, assertExists } from "@std/assert";
+import {
+  assertEquals,
+  assertExists,
+  assertFalse,
+  assertStringIncludes,
+} from "@std/assert";
 import {
   copilotModels,
   jsonResponse,
+  parseSSEText,
   requestApp,
   setupAppTest,
   sseResponse,
   withMockedFetch,
 } from "../../../../test-helpers.ts";
+
+const getUsageOnlyChatChunks = (
+  events: Array<{ event: string; data: string }>,
+): Array<Record<string, unknown>> =>
+  events.flatMap((event) => {
+    if (event.data === "[DONE]") return [];
+
+    const data = JSON.parse(event.data) as Record<string, unknown>;
+    return Array.isArray(data.choices) && data.choices.length === 0 &&
+        "usage" in data
+      ? [data]
+      : [];
+  });
 
 Deno.test("/v1/chat/completions malformed JSON returns structured internal debug error", async () => {
   const { apiKey } = await setupAppTest();
@@ -27,6 +46,129 @@ Deno.test("/v1/chat/completions malformed JSON returns structured internal debug
   assertEquals(body.error.name, "SyntaxError");
   assertEquals(body.error.source_api, "chat-completions");
   assertExists(body.error.stack);
+});
+
+Deno.test("/v1/chat/completions streams malformed upstream Chat SSE as an error event", async () => {
+  const { apiKey } = await setupAppTest();
+
+  await withMockedFetch((request) => {
+    const url = new URL(request.url);
+
+    if (url.hostname === "update.code.visualstudio.com") {
+      return jsonResponse(["1.110.1"]);
+    }
+    if (url.pathname === "/copilot_internal/v2/token") {
+      return jsonResponse({
+        token: "copilot-access-token",
+        expires_at: 4102444800,
+        refresh_in: 3600,
+      });
+    }
+    if (url.pathname === "/models") {
+      return jsonResponse(copilotModels([
+        {
+          id: "gpt-malformed-chat",
+          supported_endpoints: ["/chat/completions"],
+        },
+      ]));
+    }
+    if (url.pathname === "/chat/completions") {
+      return new Response("data: not json", {
+        headers: { "content-type": "text/event-stream" },
+      });
+    }
+
+    throw new Error(`Unhandled fetch ${request.url}`);
+  }, async () => {
+    const response = await requestApp("/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey.key,
+      },
+      body: JSON.stringify({
+        model: "gpt-malformed-chat",
+        stream: true,
+        messages: [{ role: "user", content: "Hi" }],
+      }),
+    });
+
+    assertEquals(response.status, 200);
+
+    const events = parseSSEText(await response.text());
+    assertEquals(events.length, 1);
+    assertEquals(events[0].event, "error");
+
+    const event = JSON.parse(events[0].data);
+    assertEquals(event.error.type, "internal_error");
+    assertStringIncludes(
+      event.error.message,
+      "Malformed upstream Chat Completions SSE JSON: not json",
+    );
+    assertExists(event.error.stack);
+  });
+});
+
+Deno.test("/v1/chat/completions rejects upstream Chat SSE error payloads in non-stream responses", async () => {
+  const { apiKey } = await setupAppTest();
+
+  await withMockedFetch((request) => {
+    const url = new URL(request.url);
+
+    if (url.hostname === "update.code.visualstudio.com") {
+      return jsonResponse(["1.110.1"]);
+    }
+    if (url.pathname === "/copilot_internal/v2/token") {
+      return jsonResponse({
+        token: "copilot-access-token",
+        expires_at: 4102444800,
+        refresh_in: 3600,
+      });
+    }
+    if (url.pathname === "/models") {
+      return jsonResponse(copilotModels([
+        {
+          id: "gpt-chat-error-payload",
+          supported_endpoints: ["/chat/completions"],
+        },
+      ]));
+    }
+    if (url.pathname === "/chat/completions") {
+      return new Response(
+        `data: ${
+          JSON.stringify({
+            error: {
+              type: "server_error",
+              message: "upstream chat failed",
+            },
+          })
+        }`,
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    }
+
+    throw new Error(`Unhandled fetch ${request.url}`);
+  }, async () => {
+    const response = await requestApp("/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey.key,
+      },
+      body: JSON.stringify({
+        model: "gpt-chat-error-payload",
+        messages: [{ role: "user", content: "Hi" }],
+      }),
+    });
+
+    assertEquals(response.status, 502);
+    const body = await response.json();
+    assertEquals(body.error.type, "internal_error");
+    assertStringIncludes(
+      body.error.message,
+      "Upstream Chat Completions SSE error: server_error: upstream chat failed",
+    );
+  });
 });
 
 Deno.test("/v1/chat/completions prefers the native chat path on dual-endpoint models", async () => {
@@ -90,6 +232,7 @@ Deno.test("/v1/chat/completions prefers the native chat path on dual-endpoint mo
         model: "gpt-chat-dual",
         max_tokens: 256,
         stream: false,
+        service_tier: "auto",
         messages: [{ role: "user", content: "Hi" }],
       }),
     });
@@ -102,6 +245,397 @@ Deno.test("/v1/chat/completions prefers the native chat path on dual-endpoint mo
   assertExists(upstreamBody);
   const messages = upstreamBody!.messages as Array<Record<string, unknown>>;
   assertEquals(messages[0].role, "user");
+  assertFalse("service_tier" in upstreamBody!);
+});
+
+Deno.test("/v1/chat/completions keeps exact dated model matches before alias fallback", async () => {
+  const { apiKey } = await setupAppTest();
+
+  let upstreamPath = "";
+  let upstreamBody: Record<string, unknown> | undefined;
+
+  await withMockedFetch(async (request) => {
+    const url = new URL(request.url);
+
+    if (url.hostname === "update.code.visualstudio.com") {
+      return jsonResponse(["1.110.1"]);
+    }
+    if (url.pathname === "/copilot_internal/v2/token") {
+      return jsonResponse({
+        token: "copilot-access-token",
+        expires_at: 4102444800,
+        refresh_in: 3600,
+      });
+    }
+    if (url.pathname === "/models") {
+      return jsonResponse(copilotModels([
+        {
+          id: "claude-haiku-4.5-20251001",
+          supported_endpoints: ["/chat/completions"],
+        },
+        {
+          id: "claude-haiku-4.5",
+          supported_endpoints: ["/v1/messages"],
+        },
+      ]));
+    }
+    if (url.pathname === "/v1/messages") {
+      throw new Error(
+        "base model alias should not be used on exact dated model matches",
+      );
+    }
+    if (url.pathname === "/chat/completions") {
+      upstreamPath = url.pathname;
+      upstreamBody = JSON.parse(await request.text()) as Record<
+        string,
+        unknown
+      >;
+      return jsonResponse({
+        id: "chatcmpl_dated_exact",
+        object: "chat.completion",
+        created: 1,
+        model: "claude-haiku-4.5-20251001",
+        choices: [{
+          index: 0,
+          message: { role: "assistant", content: "ok" },
+          finish_reason: "stop",
+        }],
+      });
+    }
+
+    throw new Error(`Unhandled fetch ${request.url}`);
+  }, async () => {
+    const response = await requestApp("/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey.key,
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4.5-20251001",
+        max_tokens: 256,
+        stream: false,
+        messages: [{ role: "user", content: "Hi" }],
+      }),
+    });
+
+    assertEquals(response.status, 200);
+    assertEquals(upstreamPath, "/chat/completions");
+    assertEquals(upstreamBody?.model, "claude-haiku-4.5-20251001");
+  });
+});
+
+Deno.test("/v1/chat/completions sends base model upstream after dated alias fallback", async () => {
+  const { apiKey } = await setupAppTest();
+
+  let upstreamBody: Record<string, unknown> | undefined;
+
+  await withMockedFetch(async (request) => {
+    const url = new URL(request.url);
+
+    if (url.hostname === "update.code.visualstudio.com") {
+      return jsonResponse(["1.110.1"]);
+    }
+    if (url.pathname === "/copilot_internal/v2/token") {
+      return jsonResponse({
+        token: "copilot-access-token",
+        expires_at: 4102444800,
+        refresh_in: 3600,
+      });
+    }
+    if (url.pathname === "/models") {
+      return jsonResponse(copilotModels([
+        {
+          id: "claude-haiku-4.5",
+          supported_endpoints: ["/v1/messages"],
+        },
+      ]));
+    }
+    if (url.pathname === "/v1/messages") {
+      upstreamBody = JSON.parse(await request.text()) as Record<
+        string,
+        unknown
+      >;
+      return sseResponse([
+        {
+          event: "message_start",
+          data: {
+            type: "message_start",
+            message: {
+              id: "msg_dated_alias",
+              type: "message",
+              role: "assistant",
+              content: [],
+              model: "claude-haiku-4.5",
+              stop_reason: null,
+              stop_sequence: null,
+              usage: { input_tokens: 10, output_tokens: 0 },
+            },
+          },
+        },
+        {
+          event: "content_block_start",
+          data: {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "text", text: "" },
+          },
+        },
+        {
+          event: "content_block_delta",
+          data: {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: "ok" },
+          },
+        },
+        {
+          event: "content_block_stop",
+          data: { type: "content_block_stop", index: 0 },
+        },
+        {
+          event: "message_delta",
+          data: {
+            type: "message_delta",
+            delta: { stop_reason: "end_turn", stop_sequence: null },
+            usage: { output_tokens: 1 },
+          },
+        },
+        { event: "message_stop", data: { type: "message_stop" } },
+      ]);
+    }
+
+    throw new Error(`Unhandled fetch ${request.url}`);
+  }, async () => {
+    const response = await requestApp("/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey.key,
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 256,
+        stream: false,
+        messages: [{ role: "user", content: "Hi" }],
+      }),
+    });
+
+    assertEquals(response.status, 200);
+    assertEquals(upstreamBody?.model, "claude-haiku-4.5");
+  });
+});
+
+Deno.test("/v1/chat/completions omits the final usage-only SSE chunk unless the caller requested include_usage", async () => {
+  const { apiKey } = await setupAppTest();
+
+  await withMockedFetch((request) => {
+    const url = new URL(request.url);
+
+    if (url.hostname === "update.code.visualstudio.com") {
+      return jsonResponse(["1.110.1"]);
+    }
+    if (url.pathname === "/copilot_internal/v2/token") {
+      return jsonResponse({
+        token: "copilot-access-token",
+        expires_at: 4102444800,
+        refresh_in: 3600,
+      });
+    }
+    if (url.pathname === "/models") {
+      return jsonResponse(copilotModels([
+        {
+          id: "gpt-chat-stream-filter",
+          supported_endpoints: ["/chat/completions"],
+        },
+      ]));
+    }
+    if (url.pathname === "/chat/completions") {
+      return sseResponse([
+        {
+          data: {
+            id: "chatcmpl_stream_filter",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: "gpt-chat-stream-filter",
+            choices: [{
+              index: 0,
+              delta: { role: "assistant" },
+              finish_reason: null,
+            }],
+          },
+        },
+        {
+          data: {
+            id: "chatcmpl_stream_filter",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: "gpt-chat-stream-filter",
+            choices: [{
+              index: 0,
+              delta: { content: "Hello" },
+              finish_reason: null,
+            }],
+          },
+        },
+        {
+          data: {
+            id: "chatcmpl_stream_filter",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: "gpt-chat-stream-filter",
+            choices: [{
+              index: 0,
+              delta: {},
+              finish_reason: "stop",
+            }],
+          },
+        },
+        {
+          data: {
+            id: "chatcmpl_stream_filter",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: "gpt-chat-stream-filter",
+            choices: [],
+            usage: {
+              prompt_tokens: 12,
+              completion_tokens: 4,
+              total_tokens: 16,
+            },
+          },
+        },
+        { data: "[DONE]" },
+      ]);
+    }
+
+    throw new Error(`Unhandled fetch ${request.url}`);
+  }, async () => {
+    const response = await requestApp("/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey.key,
+      },
+      body: JSON.stringify({
+        model: "gpt-chat-stream-filter",
+        stream: true,
+        messages: [{ role: "user", content: "Hi" }],
+      }),
+    });
+
+    assertEquals(response.status, 200);
+    const events = parseSSEText(await response.text());
+    assertEquals(getUsageOnlyChatChunks(events), []);
+  });
+});
+
+Deno.test("/v1/chat/completions emits requested usage-only SSE chunk on native chat", async () => {
+  const { apiKey } = await setupAppTest();
+
+  await withMockedFetch((request) => {
+    const url = new URL(request.url);
+
+    if (url.hostname === "update.code.visualstudio.com") {
+      return jsonResponse(["1.110.1"]);
+    }
+    if (url.pathname === "/copilot_internal/v2/token") {
+      return jsonResponse({
+        token: "copilot-access-token",
+        expires_at: 4102444800,
+        refresh_in: 3600,
+      });
+    }
+    if (url.pathname === "/models") {
+      return jsonResponse(copilotModels([
+        {
+          id: "gpt-chat-stream-usage",
+          supported_endpoints: ["/chat/completions"],
+        },
+      ]));
+    }
+    if (url.pathname === "/chat/completions") {
+      return sseResponse([
+        {
+          data: {
+            id: "chatcmpl_stream_usage",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: "gpt-chat-stream-usage",
+            choices: [{
+              index: 0,
+              delta: { role: "assistant" },
+              finish_reason: null,
+            }],
+          },
+        },
+        {
+          data: {
+            id: "chatcmpl_stream_usage",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: "gpt-chat-stream-usage",
+            choices: [{
+              index: 0,
+              delta: { content: "Hello" },
+              finish_reason: null,
+            }],
+          },
+        },
+        {
+          data: {
+            id: "chatcmpl_stream_usage",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: "gpt-chat-stream-usage",
+            choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+          },
+        },
+        {
+          data: {
+            id: "chatcmpl_stream_usage",
+            object: "chat.completion.chunk",
+            created: 1,
+            model: "gpt-chat-stream-usage",
+            choices: [],
+            usage: {
+              prompt_tokens: 12,
+              completion_tokens: 4,
+              total_tokens: 16,
+            },
+          },
+        },
+        { data: "[DONE]" },
+      ]);
+    }
+
+    throw new Error(`Unhandled fetch ${request.url}`);
+  }, async () => {
+    const response = await requestApp("/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey.key,
+      },
+      body: JSON.stringify({
+        model: "gpt-chat-stream-usage",
+        stream: true,
+        stream_options: { include_usage: true },
+        messages: [{ role: "user", content: "Hi" }],
+      }),
+    });
+
+    assertEquals(response.status, 200);
+    const usageChunks = getUsageOnlyChatChunks(
+      parseSSEText(await response.text()),
+    );
+    assertEquals(usageChunks.length, 1);
+    assertEquals(usageChunks[0].usage, {
+      prompt_tokens: 12,
+      completion_tokens: 4,
+      total_tokens: 16,
+    });
+  });
 });
 
 Deno.test("/v1/chat/completions preserves upstream 400 errors on the native chat path", async () => {
@@ -271,6 +805,314 @@ Deno.test("/v1/chat/completions translates through messages when the model only 
   assertExists(upstreamBody);
   const messages = upstreamBody!.messages as Array<Record<string, unknown>>;
   assertEquals(messages[0].role, "user");
+});
+
+Deno.test("/v1/chat/completions via messages hides forced streaming usage unless requested", async () => {
+  const { apiKey } = await setupAppTest();
+
+  await withMockedFetch((request) => {
+    const url = new URL(request.url);
+
+    if (url.hostname === "update.code.visualstudio.com") {
+      return jsonResponse(["1.110.1"]);
+    }
+    if (url.pathname === "/copilot_internal/v2/token") {
+      return jsonResponse({
+        token: "copilot-access-token",
+        expires_at: 4102444800,
+        refresh_in: 3600,
+      });
+    }
+    if (url.pathname === "/models") {
+      return jsonResponse(copilotModels([
+        {
+          id: "claude-chat-source-stream",
+          supported_endpoints: ["/v1/messages"],
+        },
+      ]));
+    }
+    if (url.pathname === "/v1/messages") {
+      return sseResponse([
+        {
+          event: "message_start",
+          data: {
+            type: "message_start",
+            message: {
+              id: "msg_stream_usage",
+              type: "message",
+              role: "assistant",
+              content: [],
+              model: "claude-chat-source-stream",
+              stop_reason: null,
+              stop_sequence: null,
+              usage: { input_tokens: 10, output_tokens: 0 },
+            },
+          },
+        },
+        {
+          event: "content_block_start",
+          data: {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "text", text: "" },
+          },
+        },
+        {
+          event: "content_block_delta",
+          data: {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: "ok" },
+          },
+        },
+        {
+          event: "content_block_stop",
+          data: { type: "content_block_stop", index: 0 },
+        },
+        {
+          event: "message_delta",
+          data: {
+            type: "message_delta",
+            delta: { stop_reason: "end_turn", stop_sequence: null },
+            usage: { output_tokens: 1 },
+          },
+        },
+        { event: "message_stop", data: { type: "message_stop" } },
+      ]);
+    }
+
+    throw new Error(`Unhandled fetch ${request.url}`);
+  }, async () => {
+    const response = await requestApp("/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey.key,
+      },
+      body: JSON.stringify({
+        model: "claude-chat-source-stream",
+        max_tokens: 256,
+        stream: true,
+        messages: [{ role: "user", content: "Hi" }],
+      }),
+    });
+
+    assertEquals(response.status, 200);
+    const events = parseSSEText(await response.text());
+    assertEquals(getUsageOnlyChatChunks(events), []);
+  });
+});
+
+Deno.test("/v1/chat/completions via messages emits requested usage-only SSE chunk", async () => {
+  const { apiKey } = await setupAppTest();
+
+  await withMockedFetch((request) => {
+    const url = new URL(request.url);
+
+    if (url.hostname === "update.code.visualstudio.com") {
+      return jsonResponse(["1.110.1"]);
+    }
+    if (url.pathname === "/copilot_internal/v2/token") {
+      return jsonResponse({
+        token: "copilot-access-token",
+        expires_at: 4102444800,
+        refresh_in: 3600,
+      });
+    }
+    if (url.pathname === "/models") {
+      return jsonResponse(copilotModels([
+        {
+          id: "claude-chat-source-include-usage",
+          supported_endpoints: ["/v1/messages"],
+        },
+      ]));
+    }
+    if (url.pathname === "/v1/messages") {
+      return sseResponse([
+        {
+          event: "message_start",
+          data: {
+            type: "message_start",
+            message: {
+              id: "msg_stream_include_usage",
+              type: "message",
+              role: "assistant",
+              content: [],
+              model: "claude-chat-source-include-usage",
+              stop_reason: null,
+              stop_sequence: null,
+              usage: {
+                input_tokens: 10,
+                output_tokens: 0,
+                cache_read_input_tokens: 2,
+              },
+            },
+          },
+        },
+        {
+          event: "content_block_start",
+          data: {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "text", text: "" },
+          },
+        },
+        {
+          event: "content_block_delta",
+          data: {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: "ok" },
+          },
+        },
+        {
+          event: "content_block_stop",
+          data: { type: "content_block_stop", index: 0 },
+        },
+        {
+          event: "message_delta",
+          data: {
+            type: "message_delta",
+            delta: { stop_reason: "end_turn", stop_sequence: null },
+            usage: { output_tokens: 3 },
+          },
+        },
+        { event: "message_stop", data: { type: "message_stop" } },
+      ]);
+    }
+
+    throw new Error(`Unhandled fetch ${request.url}`);
+  }, async () => {
+    const response = await requestApp("/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey.key,
+      },
+      body: JSON.stringify({
+        model: "claude-chat-source-include-usage",
+        max_tokens: 256,
+        stream: true,
+        stream_options: { include_usage: true },
+        messages: [{ role: "user", content: "Hi" }],
+      }),
+    });
+
+    assertEquals(response.status, 200);
+    const usageChunks = getUsageOnlyChatChunks(
+      parseSSEText(await response.text()),
+    );
+    assertEquals(usageChunks.length, 1);
+    assertEquals(usageChunks[0].usage, {
+      prompt_tokens: 12,
+      completion_tokens: 3,
+      total_tokens: 15,
+      prompt_tokens_details: { cached_tokens: 2 },
+    });
+  });
+});
+
+Deno.test("/v1/chat/completions via responses emits requested usage-only SSE chunk", async () => {
+  const { apiKey } = await setupAppTest();
+
+  await withMockedFetch((request) => {
+    const url = new URL(request.url);
+
+    if (url.hostname === "update.code.visualstudio.com") {
+      return jsonResponse(["1.110.1"]);
+    }
+    if (url.pathname === "/copilot_internal/v2/token") {
+      return jsonResponse({
+        token: "copilot-access-token",
+        expires_at: 4102444800,
+        refresh_in: 3600,
+      });
+    }
+    if (url.pathname === "/models") {
+      return jsonResponse(copilotModels([
+        {
+          id: "gpt-responses-chat-include-usage",
+          supported_endpoints: ["/responses"],
+        },
+      ]));
+    }
+    if (url.pathname === "/responses") {
+      return sseResponse([
+        {
+          event: "response.created",
+          data: {
+            type: "response.created",
+            response: {
+              id: "resp_chat_include_usage",
+              object: "response",
+              model: "gpt-responses-chat-include-usage",
+              status: "in_progress",
+              output: [],
+              output_text: "",
+            },
+          },
+        },
+        {
+          event: "response.output_text.delta",
+          data: {
+            type: "response.output_text.delta",
+            item_id: "msg_0",
+            output_index: 0,
+            content_index: 0,
+            delta: "Hello",
+          },
+        },
+        {
+          event: "response.completed",
+          data: {
+            type: "response.completed",
+            response: {
+              id: "resp_chat_include_usage",
+              object: "response",
+              model: "gpt-responses-chat-include-usage",
+              status: "completed",
+              output: [],
+              output_text: "Hello",
+              usage: {
+                input_tokens: 21,
+                output_tokens: 5,
+                total_tokens: 26,
+                input_tokens_details: { cached_tokens: 7 },
+              },
+            },
+          },
+        },
+      ]);
+    }
+
+    throw new Error(`Unhandled fetch ${request.url}`);
+  }, async () => {
+    const response = await requestApp("/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey.key,
+      },
+      body: JSON.stringify({
+        model: "gpt-responses-chat-include-usage",
+        stream: true,
+        stream_options: { include_usage: true },
+        messages: [{ role: "user", content: "Hi" }],
+      }),
+    });
+
+    assertEquals(response.status, 200);
+    const usageChunks = getUsageOnlyChatChunks(
+      parseSSEText(await response.text()),
+    );
+    assertEquals(usageChunks.length, 1);
+    assertEquals(usageChunks[0].usage, {
+      prompt_tokens: 21,
+      completion_tokens: 5,
+      total_tokens: 26,
+      prompt_tokens_details: { cached_tokens: 7 },
+    });
+  });
 });
 
 Deno.test("/v1/chat/completions fills missing max_tokens from model limits on the messages path", async () => {

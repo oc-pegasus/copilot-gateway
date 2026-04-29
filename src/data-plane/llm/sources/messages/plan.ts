@@ -1,5 +1,5 @@
 import type { MessagesPayload } from "../../../../lib/messages-types.ts";
-import { getModelCapabilities } from "../../shared/models/get-model-capabilities.ts";
+import type { ModelCapabilities } from "../../shared/models/get-model-capabilities.ts";
 import type { MessagesPlan } from "../../shared/types/plan.ts";
 
 const hasVision = (payload: MessagesPayload): boolean =>
@@ -18,23 +18,19 @@ const getInitiator = (payload: MessagesPayload): "user" | "agent" => {
     : "agent";
 };
 
-export const planMessagesRequest = async (
+export const planMessagesRequest = (
   payload: MessagesPayload,
-  githubToken: string,
-  accountType: string,
+  capabilities: ModelCapabilities,
   rawBeta: string | undefined,
-): Promise<MessagesPlan> => {
-  const capabilities = await getModelCapabilities(
-    payload.model,
-    githubToken,
-    accountType,
-  );
+): MessagesPlan => {
   const wantsStream = payload.stream === true;
   const fetchOptions = {
     vision: hasVision(payload),
     initiator: getInitiator(payload),
   };
 
+  // Messages-origin routing prefers native Messages, then Responses, and only
+  // uses Chat Completions as the last fallback.
   if (capabilities.supportsMessages) {
     return {
       source: "messages",

@@ -31,7 +31,7 @@ function usageSummaryMetric(
     <button
       type="button"
       @click="switchTokenChartMetric('${metric}')"
-      class="text-center w-full rounded-md border border-transparent cursor-pointer transition-colors hover:border-white/10 focus:outline-none focus-visible:border-accent-cyan/40"
+      class="text-center w-full rounded-md border border-transparent cursor-pointer transition-colors hover:border-white/10 focus:outline-none focus-visible:border-accent-cyan/40 px-2 py-2"
       :aria-pressed="tokenChartMetric === '${metric}'"
       title="Use ${label} for chart y-axis"
     >
@@ -40,7 +40,9 @@ function usageSummaryMetric(
         :class="tokenChartMetric === '${metric}' ? 'text-accent-cyan' : 'text-gray-500'"
       >${label}</span>
       <template x-if="tokenLoading && !chartsReady">
-        <span class="block h-7 ${skeletonWidth} mx-auto bg-surface-600 rounded animate-pulse">
+        <span
+          class="block h-7 ${skeletonWidth} mx-auto bg-surface-600 rounded animate-pulse"
+        >
         </span>
       </template>
       <template x-if="!tokenLoading || chartsReady">
@@ -52,6 +54,17 @@ function usageSummaryMetric(
         </span>
       </template>
     </button>
+  `;
+}
+
+function usageSummaryMetricPair(
+  first: ReturnType<typeof html>,
+  second: ReturnType<typeof html>,
+) {
+  return html`
+    <div class="grid grid-cols-2 lg:grid-cols-1 gap-2">
+      ${first} ${second}
+    </div>
   `;
 }
 
@@ -68,7 +81,8 @@ function codeBlock(
       ><code class="language-${lang}" x-ref="${ref}" x-effect="$el.textContent = ${snippetFn}(); Prism.highlightElement($el)"></code></pre>
       <button
         @click="copySnippet(${snippetFn}(), '${copyId}')"
-        class="absolute top-2.5 right-2.5 p-1.5 rounded-md bg-surface-700/80 text-gray-500 hover:text-accent-cyan hover:bg-surface-600 transition-all opacity-0 group-hover:opacity-100"
+        class="absolute top-2.5 right-2.5 p-1.5 rounded-md bg-surface-700/80 text-gray-500 hover:text-accent-cyan hover:bg-surface-600 transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+        aria-label="Copy snippet"
         :title="copied === '${copyId}' ? 'Copied!' : 'Copy'"
       >
         <svg
@@ -103,9 +117,9 @@ export function renderDashboardHeader() {
       class="border-b border-white/5 bg-surface-900/80 backdrop-blur-md sticky top-0 z-50"
     >
       <div
-        class="max-w-6xl mx-auto px-6 py-3 flex flex-wrap items-center gap-x-5 gap-y-3"
+        class="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-x-4 gap-y-3"
       >
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 min-w-0">
           <div
             class="w-8 h-8 rounded-lg bg-surface-700 glow-border flex items-center justify-center"
           >
@@ -125,11 +139,11 @@ export function renderDashboardHeader() {
           >Copilot Gateway</span>
         </div>
 
-        <nav class="flex gap-1 bg-surface-800 rounded-lg p-0.5 w-fit">
+        <nav class="order-3 flex w-full max-w-full gap-1 overflow-x-auto rounded-lg bg-surface-800 p-0.5 sm:order-none sm:w-fit">
           <template x-if="isAdmin">
             <button
               @click="switchTab('upstream')"
-              class="px-4 py-2 rounded-md text-sm font-medium transition-all"
+              class="shrink-0 px-2 py-2 rounded-md text-xs font-medium transition-all sm:px-4 sm:text-sm"
               :class="tab === 'upstream' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'"
             >
               Upstream
@@ -137,21 +151,21 @@ export function renderDashboardHeader() {
           </template>
           <button
             @click="switchTab('keys')"
-            class="px-4 py-2 rounded-md text-sm font-medium transition-all"
+            class="shrink-0 px-2 py-2 rounded-md text-xs font-medium transition-all sm:px-4 sm:text-sm"
             :class="tab === 'keys' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'"
           >
             API Keys
           </button>
           <button
             @click="switchTab('usage')"
-            class="px-4 py-2 rounded-md text-sm font-medium transition-all"
+            class="shrink-0 px-2 py-2 rounded-md text-xs font-medium transition-all sm:px-4 sm:text-sm"
             :class="tab === 'usage' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'"
           >
             Usage
           </button>
           <button
             @click="switchTab('models')"
-            class="px-4 py-2 rounded-md text-sm font-medium transition-all"
+            class="shrink-0 px-2 py-2 rounded-md text-xs font-medium transition-all sm:px-4 sm:text-sm"
             :class="tab === 'models' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'"
           >
             Models
@@ -159,7 +173,7 @@ export function renderDashboardHeader() {
           <template x-if="isAdmin">
             <button
               @click="switchTab('settings')"
-              class="px-4 py-2 rounded-md text-sm font-medium transition-all"
+              class="shrink-0 px-2 py-2 rounded-md text-xs font-medium transition-all sm:px-4 sm:text-sm"
               :class="tab === 'settings' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'"
             >
               Settings
@@ -167,7 +181,7 @@ export function renderDashboardHeader() {
           </template>
         </nav>
 
-        <button @click="logout()" class="btn-ghost text-xs ml-auto">Logout</button>
+        <button @click="logout()" class="btn-ghost text-xs ml-auto shrink-0">Logout</button>
       </div>
     </header>
   `;
@@ -184,9 +198,9 @@ export function renderUpstreamTab() {
       >
         <template x-if="meLoaded && githubAccounts.length === 0">
           <div
-            class="glass-card p-6 mb-8 glow-border animate-in flex items-center justify-between"
+            class="glass-card p-5 sm:p-6 mb-8 glow-border animate-in flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
           >
-            <div>
+            <div class="min-w-0">
               <h3 class="text-white font-medium mb-1">Connect GitHub Account</h3>
               <p class="text-sm text-gray-400">
                 Link your GitHub account to use Copilot API with your own token.
@@ -194,7 +208,7 @@ export function renderUpstreamTab() {
             </div>
             <button
               @click="startGithubAuth()"
-              class="btn-primary"
+              class="btn-primary w-full sm:w-auto"
               :disabled="deviceFlow.loading"
             >
               <span x-show="!deviceFlow.loading">Connect GitHub</span>
@@ -207,9 +221,9 @@ export function renderUpstreamTab() {
 
         <template x-if="deviceFlow.userCode">
           <div
-            class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in"
+            class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in overflow-y-auto p-4"
           >
-            <div class="glass-card p-8 max-w-md w-full mx-4 glow-cyan">
+            <div class="glass-card p-6 sm:p-8 max-w-md w-full glow-cyan">
               <h3 class="text-white text-lg font-semibold mb-2">
                 GitHub Authorization
               </h3>
@@ -221,7 +235,7 @@ export function renderUpstreamTab() {
                 class="bg-surface-900 rounded-xl p-6 text-center mb-6 glow-border"
               >
                 <code
-                  class="text-3xl font-mono font-bold text-accent-cyan tracking-[0.3em]"
+                  class="block text-2xl sm:text-3xl font-mono font-bold text-accent-cyan tracking-[0.2em] sm:tracking-[0.3em] break-all"
                   x-text="deviceFlow.userCode"
                 ></code>
               </div>
@@ -229,7 +243,7 @@ export function renderUpstreamTab() {
               <p class="text-gray-500 text-xs text-center mb-2">
                 Visit <a
                   :href="deviceFlow.verificationUri"
-                  class="text-accent-cyan hover:underline"
+                  class="text-accent-cyan hover:underline break-all"
                   x-text="deviceFlow.verificationUri"
                   target="_blank"
                 ></a>
@@ -441,11 +455,11 @@ export function renderUpstreamTab() {
                 <template x-for="acct in githubAccounts" :key="acct.id">
                   <div
                     @click="!acct.active && switchGithubAccount(acct.id)"
-                    class="flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors"
+                    class="flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 transition-colors"
                     :class="acct.active ? 'bg-accent-cyan/5 border border-accent-cyan/15' : 'hover:bg-white/[0.03] cursor-pointer border border-transparent'"
                   >
-                    <div class="flex items-center gap-3">
-                      <div class="relative">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="relative shrink-0">
                         <img
                           :src="acct.avatar_url"
                           class="w-9 h-9 rounded-lg ring-1 ring-white/5"
@@ -456,24 +470,25 @@ export function renderUpstreamTab() {
                         >
                         </div>
                       </div>
-                      <div>
+                      <div class="min-w-0">
                         <p
-                          class="text-sm text-white font-medium"
+                          class="text-sm text-white font-medium truncate"
                           x-text="acct.name || acct.login"
                         >
                         </p>
-                        <p class="text-xs text-gray-500" x-text="'@' + acct.login">
+                        <p class="text-xs text-gray-500 truncate" x-text="'@' + acct.login">
                         </p>
                       </div>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div class="flex shrink-0 items-center gap-2">
                       <span
                         x-show="acct.active"
                         class="text-[10px] font-medium text-accent-emerald uppercase tracking-widest"
                       >Active</span>
                       <button
                         @click.stop="disconnectGithub(acct.id, acct.login)"
-                        class="text-gray-600 hover:text-accent-rose transition-colors p-1"
+                        class="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md text-gray-600 hover:text-accent-rose hover:bg-white/[0.04] transition-colors p-1"
+                        aria-label="Disconnect GitHub account"
                         title="Disconnect"
                       >
                         <svg
@@ -505,31 +520,31 @@ export function renderUpstreamTab() {
                 <span
                   class="px-2 py-0.5 rounded bg-accent-emerald/10 text-accent-emerald text-[10px] font-bold"
                 >POST</span>
-                <span class="text-gray-300">/v1/chat/completions</span>
+                <span class="text-gray-300 break-all">/v1/chat/completions</span>
               </div>
               <div class="flex items-center gap-2">
                 <span
                   class="px-2 py-0.5 rounded bg-accent-emerald/10 text-accent-emerald text-[10px] font-bold"
                 >POST</span>
-                <span class="text-gray-300">/v1/messages</span>
+                <span class="text-gray-300 break-all">/v1/messages</span>
               </div>
               <div class="flex items-center gap-2">
                 <span
                   class="px-2 py-0.5 rounded bg-accent-emerald/10 text-accent-emerald text-[10px] font-bold"
                 >POST</span>
-                <span class="text-gray-300">/v1/responses</span>
+                <span class="text-gray-300 break-all">/v1/responses</span>
               </div>
               <div class="flex items-center gap-2">
                 <span
                   class="px-2 py-0.5 rounded bg-accent-emerald/10 text-accent-emerald text-[10px] font-bold"
                 >POST</span>
-                <span class="text-gray-300">/v1/embeddings</span>
+                <span class="text-gray-300 break-all">/v1/embeddings</span>
               </div>
               <div class="flex items-center gap-2">
                 <span
                   class="px-2 py-0.5 rounded bg-accent-cyan/10 text-accent-cyan text-[10px] font-bold"
                 >GET</span>
-                <span class="text-gray-300">/v1/models</span>
+                <span class="text-gray-300 break-all">/v1/models</span>
               </div>
             </div>
           </div>
@@ -545,7 +560,11 @@ export function renderUpstreamTab() {
 
           <div class="space-y-5">
             <div>
-              <p class="text-xs font-medium text-gray-500 uppercase tracking-widest mb-3">Search Provider</p>
+              <p
+                class="text-xs font-medium text-gray-500 uppercase tracking-widest mb-3"
+              >
+                Search Provider
+              </p>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <label
                   class="flex items-center gap-3 rounded-xl border p-4 transition-all cursor-pointer"
@@ -562,7 +581,9 @@ export function renderUpstreamTab() {
                   >
                   <div>
                     <p class="text-sm font-medium text-white">Disabled</p>
-                    <p class="text-xs text-gray-500">No upstream web search provider</p>
+                    <p class="text-xs text-gray-500">
+                      No upstream web search provider
+                    </p>
                   </div>
                 </label>
 
@@ -581,7 +602,9 @@ export function renderUpstreamTab() {
                   >
                   <div>
                     <p class="text-sm font-medium text-white">Tavily</p>
-                    <p class="text-xs text-gray-500">Gateway-managed Tavily API key</p>
+                    <p class="text-xs text-gray-500">
+                      Gateway-managed Tavily API key
+                    </p>
                   </div>
                 </label>
 
@@ -599,8 +622,12 @@ export function renderUpstreamTab() {
                     @change="setSearchConfigProvider('microsoft-grounding')"
                   >
                   <div>
-                    <p class="text-sm font-medium text-white">Microsoft Grounding</p>
-                    <p class="text-xs text-gray-500">Gateway-managed Microsoft Grounding key</p>
+                    <p class="text-sm font-medium text-white">
+                      Microsoft Grounding
+                    </p>
+                    <p class="text-xs text-gray-500">
+                      Gateway-managed Microsoft Grounding key
+                    </p>
                   </div>
                 </label>
               </div>
@@ -613,6 +640,7 @@ export function renderUpstreamTab() {
               ></label>
               <input
                 type="password"
+                autocomplete="off"
                 :placeholder="searchConfigDraft.provider === 'tavily' ? 'Tavily API key' : searchConfigDraft.provider === 'microsoft-grounding' ? 'Microsoft Grounding API key' : 'No credential needed when disabled'"
                 :value="searchCredentialValue"
                 @input="setSearchCredentialValue($event.target.value)"
@@ -621,14 +649,14 @@ export function renderUpstreamTab() {
               >
             </div>
 
-            <div class="flex flex-wrap items-center gap-3">
+            <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <p class="text-xs text-gray-500" x-show="!searchConfigLoaded">
                 Loading saved search config...
               </p>
 
               <button
                 @click="saveSearchConfig()"
-                class="btn-primary"
+                class="btn-primary w-full sm:w-auto"
                 :disabled="!searchConfigLoaded || searchConfigSaving"
               >
                 <span x-show="!searchConfigSaving">Save Search Config</span>
@@ -639,7 +667,7 @@ export function renderUpstreamTab() {
 
               <button
                 @click="testSearchConfig()"
-                class="btn-ghost"
+                class="btn-ghost w-full sm:w-auto"
                 :disabled="!searchConfigLoaded || searchConfigTesting || searchConfigDraft.provider === 'disabled'"
               >
                 <span x-show="!searchConfigTesting">Test Search</span>
@@ -648,18 +676,25 @@ export function renderUpstreamTab() {
                 </span>
               </button>
 
-              <p class="text-xs text-gray-500" x-show="searchConfigDraft.provider === 'disabled'">
+              <p
+                class="text-xs text-gray-500"
+                x-show="searchConfigDraft.provider === 'disabled'"
+              >
                 Search testing is disabled until a provider is selected.
               </p>
             </div>
 
             <template x-if="searchConfigTestResult">
               <div class="bg-surface-900 rounded-xl border border-white/5 p-4">
-                <div class="flex items-center justify-between gap-3 mb-4">
-                  <div>
+                <div class="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div class="min-w-0">
                     <p class="text-sm font-medium text-white">Search Test Result</p>
                     <p class="text-xs text-gray-500">
-                      Provider: <span x-text="searchConfigTestResult.provider"></span> · Query: <span x-text="searchConfigTestResult.query"></span>
+                      Provider: <span
+                        x-text="searchConfigTestResult.provider"
+                      ></span> · Query: <span
+                        x-text="searchConfigTestResult.query"
+                      ></span>
                     </p>
                   </div>
                   <span
@@ -671,21 +706,38 @@ export function renderUpstreamTab() {
 
                 <template x-if="searchConfigTestResult.ok">
                   <div class="space-y-3">
-                    <template x-for="result in searchConfigTestResult.results" :key="result.url + result.title">
-                      <div class="rounded-lg border border-white/5 bg-surface-800 p-3">
+                    <template
+                      x-for="result in searchConfigTestResult.results"
+                      :key="result.url + result.title"
+                    >
+                      <div
+                        class="rounded-lg border border-white/5 bg-surface-800 p-3"
+                      >
                         <div class="flex items-start justify-between gap-3 mb-1">
                           <div>
                             <a
                               :href="result.url"
                               target="_blank"
-                              class="text-sm font-medium text-accent-cyan hover:underline"
+                              class="text-sm font-medium text-accent-cyan hover:underline break-words"
                               x-text="result.title"
                             ></a>
-                            <p class="text-[11px] text-gray-500" x-text="result.url"></p>
+                            <p
+                              class="text-[11px] text-gray-500 break-all"
+                              x-text="result.url"
+                            >
+                            </p>
                           </div>
-                          <span class="text-[10px] text-gray-600 uppercase tracking-widest" x-show="result.pageAge" x-text="result.pageAge"></span>
+                          <span
+                            class="text-[10px] text-gray-600 uppercase tracking-widest"
+                            x-show="result.pageAge"
+                            x-text="result.pageAge"
+                          ></span>
                         </div>
-                        <p class="text-sm text-gray-300 leading-relaxed" x-text="result.previewText"></p>
+                        <p
+                          class="text-sm text-gray-300 leading-relaxed"
+                          x-text="result.previewText"
+                        >
+                        </p>
                       </div>
                     </template>
                   </div>
@@ -693,8 +745,16 @@ export function renderUpstreamTab() {
 
                 <template x-if="!searchConfigTestResult.ok">
                   <div class="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
-                    <p class="text-sm text-red-300 font-medium" x-text="searchConfigTestResult.error.code"></p>
-                    <p class="text-sm text-gray-300 mt-1" x-text="searchConfigTestResult.error.message"></p>
+                    <p
+                      class="text-sm text-red-300 font-medium"
+                      x-text="searchConfigTestResult.error.code"
+                    >
+                    </p>
+                    <p
+                      class="text-sm text-gray-300 mt-1"
+                      x-text="searchConfigTestResult.error.message"
+                    >
+                    </p>
                   </div>
                 </template>
               </div>
@@ -709,16 +769,16 @@ export function renderUpstreamTab() {
 export function renderKeysTab() {
   return html`
     <div x-show="tab === 'keys'">
-      <div class="glass-card p-6 mb-6 animate-in">
-        <div class="flex items-center justify-between mb-6">
+      <div class="glass-card p-5 sm:p-6 mb-6 animate-in">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
           <span class="text-xs font-medium text-gray-500 uppercase tracking-widest"
           >API Keys</span>
-          <div x-show="isAdmin" class="flex items-center gap-2">
+          <div x-show="isAdmin" class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <input
               type="text"
               x-model="newKeyName"
               placeholder="Name"
-              class="!text-xs !py-1.5 !px-3 !w-32 !rounded-lg"
+              class="!text-xs !py-2.5 !px-3 !w-full sm:!w-32 !rounded-lg"
               @keydown.enter="createNewKey()"
             />
             <select
@@ -733,7 +793,7 @@ export function renderKeysTab() {
             </select>
             <button
               @click="createNewKey()"
-              class="btn-primary !text-xs !py-1.5 !px-3 !rounded-lg whitespace-nowrap"
+              class="btn-primary !text-xs !py-2.5 !px-3 !rounded-lg whitespace-nowrap w-full sm:w-auto"
               :disabled="!newKeyName.trim() || keyCreating"
             >
               <span x-show="!keyCreating">+ Create</span>
@@ -757,7 +817,7 @@ export function renderKeysTab() {
             </div>
           </template>
           <template x-if="keys.length > 0">
-            <table class="w-full text-sm">
+            <table class="w-full min-w-[760px] text-sm">
               <thead>
                 <tr class="border-b border-white/5">
                   <th
@@ -802,13 +862,13 @@ export function renderKeysTab() {
                     :class="selectedKeyId === k.id ? 'bg-accent-cyan/5 hover:bg-accent-cyan/8' : 'hover:bg-white/[0.02]'"
                   >
                     <td class="py-3 pr-4 pl-2">
-                      <div class="flex items-center gap-2">
+                      <div class="flex items-center gap-2 min-w-0">
                         <div
                           class="w-1.5 h-1.5 rounded-full shrink-0 transition-colors"
                           :class="selectedKeyId === k.id ? 'bg-accent-cyan' : 'bg-transparent'"
                         >
                         </div>
-                        <span class="text-white font-medium" x-text="k.name"></span>
+                        <span class="text-white font-medium truncate" x-text="k.name"></span>
                       </div>
                     </td>
                     <td class="py-3 pr-4">
@@ -850,7 +910,8 @@ export function renderKeysTab() {
                       <div class="flex items-center justify-end gap-1">
                         <button
                           @click.stop="copySnippet(k.key, 'key-' + k.id)"
-                          class="text-gray-600 hover:text-accent-cyan transition-colors p-1"
+                          class="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md text-gray-600 hover:text-accent-cyan hover:bg-white/[0.04] transition-colors p-1"
+                          aria-label="Copy API key"
                           title="Copy key"
                         >
                           <svg
@@ -880,7 +941,8 @@ export function renderKeysTab() {
                         <template x-if="isAdmin">
                           <button
                             @click.stop="renameKeyById(k.id, k.name)"
-                            class="text-gray-600 hover:text-accent-violet transition-colors p-1"
+                            class="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md text-gray-600 hover:text-accent-cyan hover:bg-white/[0.04] transition-colors p-1"
+                            aria-label="Rename API key"
                             title="Rename key"
                           >
                             <svg
@@ -900,7 +962,8 @@ export function renderKeysTab() {
                         <template x-if="isAdmin">
                           <button
                             @click.stop="rotateKeyById(k.id, k.name)"
-                            class="text-gray-600 hover:text-accent-amber transition-colors p-1"
+                            class="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md text-gray-600 hover:text-accent-amber hover:bg-white/[0.04] transition-colors p-1"
+                            aria-label="Rotate API key"
                             :disabled="keyRotating === k.id"
                             title="Rotate key"
                           >
@@ -921,7 +984,8 @@ export function renderKeysTab() {
                         <template x-if="isAdmin">
                           <button
                             @click.stop="deleteKeyById(k.id, k.name)"
-                            class="text-gray-600 hover:text-accent-rose transition-colors p-1"
+                            class="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md text-gray-600 hover:text-accent-rose hover:bg-white/[0.04] transition-colors p-1"
+                            aria-label="Delete API key"
                             :disabled="keyDeleting === k.id"
                             title="Delete key"
                           >
@@ -949,7 +1013,7 @@ export function renderKeysTab() {
         </div>
       </div>
 
-      <div class="glass-card p-6 animate-in delay-1">
+      <div class="glass-card p-5 sm:p-6 animate-in delay-1">
         <span class="text-xs font-medium text-gray-500 uppercase tracking-widest"
         >Configuration</span>
         <template x-if="selectedKeyId">
@@ -992,33 +1056,33 @@ export function renderKeysTab() {
               </div>
 
               <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-3">
-                <div class="flex items-center gap-2">
+                <div class="flex min-w-0 items-center gap-2">
                   <label class="text-xs text-gray-500">Model:</label>
                   <select
                     x-model="claudeModel"
-                    class="text-xs font-mono bg-surface-800 text-gray-300 border border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-accent-cyan/50 cursor-pointer"
+                    class="max-w-full text-xs font-mono bg-surface-800 text-gray-300 border border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-accent-cyan/50 cursor-pointer"
                   >
                     <template x-for="m in claudeModelsBig" :key="m">
                       <option :value="m" x-text="m"></option>
                     </template>
                   </select>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex min-w-0 items-center gap-2">
                   <label class="text-xs text-gray-500">Sonnet:</label>
                   <select
                     x-model="claudeSonnetModel"
-                    class="text-xs font-mono bg-surface-800 text-gray-300 border border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-accent-cyan/50 cursor-pointer"
+                    class="max-w-full text-xs font-mono bg-surface-800 text-gray-300 border border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-accent-cyan/50 cursor-pointer"
                   >
                     <template x-for="m in claudeModelsSonnet" :key="m">
                       <option :value="m" x-text="m"></option>
                     </template>
                   </select>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex min-w-0 items-center gap-2">
                   <label class="text-xs text-gray-500">Haiku:</label>
                   <select
                     x-model="claudeSmallModel"
-                    class="text-xs font-mono bg-surface-800 text-gray-300 border border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-accent-cyan/50 cursor-pointer"
+                    class="max-w-full text-xs font-mono bg-surface-800 text-gray-300 border border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-accent-cyan/50 cursor-pointer"
                   >
                     <template x-for="m in claudeModelsSmall" :key="m">
                       <option :value="m" x-text="m"></option>
@@ -1040,11 +1104,11 @@ export function renderKeysTab() {
                 <span class="text-sm font-semibold text-white">Codex</span>
               </div>
 
-              <div class="flex items-center gap-2 mb-3">
+              <div class="flex min-w-0 items-center gap-2 mb-3">
                 <label class="text-xs text-gray-500">Model:</label>
                 <select
                   x-model="codexModel"
-                  class="text-xs font-mono bg-surface-800 text-gray-300 border border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-accent-cyan/50 cursor-pointer"
+                  class="max-w-full text-xs font-mono bg-surface-800 text-gray-300 border border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-accent-cyan/50 cursor-pointer"
                 >
                   <template x-for="m in codexModels" :key="m">
                     <option :value="m" x-text="m"></option>
@@ -1084,7 +1148,8 @@ export function renderUsageTab() {
             >Token Usage — By Key</span>
             <button
               @click="toggleRedactKeys()"
-              class="p-1 rounded transition-colors text-gray-600 hover:text-gray-400"
+              class="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md p-1 transition-colors text-gray-600 hover:text-gray-400 hover:bg-white/[0.04]"
+              aria-label="Toggle key name redaction"
               title="Redact key names"
             >
               <svg
@@ -1123,24 +1188,24 @@ export function renderUsageTab() {
               ${spinner("h-3.5 w-3.5 text-gray-500")}
             </template>
           </div>
-          <div class="flex items-center gap-1 bg-surface-800 rounded-lg p-0.5">
+          <div class="flex max-w-full items-center gap-1 overflow-x-auto bg-surface-800 rounded-lg p-0.5">
             <button
               @click="switchTokenRange('today')"
-              class="px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+              class="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
               :class="tokenRange === 'today' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'"
             >
               Last Day
             </button>
             <button
               @click="switchTokenRange('7d')"
-              class="px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+              class="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
               :class="tokenRange === '7d' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'"
             >
               7 Days
             </button>
             <button
               @click="switchTokenRange('30d')"
-              class="px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+              class="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
               :class="tokenRange === '30d' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'"
             >
               30 Days
@@ -1177,43 +1242,100 @@ export function renderUsageTab() {
           </div>
         </div>
 
-        <div class="grid grid-cols-6 gap-4 mt-6 pt-5 border-t border-white/5">
-          ${usageSummaryMetric(
-            "requests",
-            "Requests",
-            "tokenSummary.requests.toLocaleString()",
-            "w-16",
+        <div
+          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-6 pt-5 border-t border-white/5"
+        >
+          ${usageSummaryMetricPair(
+            usageSummaryMetric(
+              "requests",
+              "Requests",
+              "tokenSummary.requests.toLocaleString()",
+              "w-16",
+            ),
+            usageSummaryMetric(
+              "total",
+              "Total Tokens",
+              "tokenSummary.total.toLocaleString()",
+              "w-20",
+            ),
+          )} ${usageSummaryMetricPair(
+            usageSummaryMetric(
+              "input",
+              "Input Tokens",
+              "tokenSummary.input.toLocaleString()",
+              "w-20",
+            ),
+            usageSummaryMetric(
+              "output",
+              "Output Tokens",
+              "tokenSummary.output.toLocaleString()",
+              "w-20",
+            ),
+          )} ${usageSummaryMetricPair(
+            usageSummaryMetric(
+              "cached",
+              "Cached Input",
+              "tokenSummary.cacheRead.toLocaleString()",
+              "w-20",
+            ),
+            usageSummaryMetric(
+              "cachedRate",
+              "Cached Rate",
+              "formatInputRate(tokenSummary.cacheRead, tokenSummary.input)",
+              "w-20",
+            ),
+          )} ${usageSummaryMetricPair(
+            usageSummaryMetric(
+              "prefill",
+              "Prefill Input",
+              "tokenSummary.prefill.toLocaleString()",
+              "w-20",
+            ),
+            usageSummaryMetric(
+              "prefillRate",
+              "Prefill Rate",
+              "formatInputRate(tokenSummary.prefill, tokenSummary.input)",
+              "w-20",
+            ),
+          )} ${usageSummaryMetricPair(
+            usageSummaryMetric(
+              "cacheCreation",
+              "Cache Write",
+              "tokenSummary.cacheCreation.toLocaleString()",
+              "w-20",
+            ),
+            usageSummaryMetric(
+              "cacheHitRate",
+              "Cache Hit Rate",
+              "formatHitRate(tokenSummary.cacheRead, tokenSummary.cacheCreation)",
+              "w-20",
+            ),
           )}
-          ${usageSummaryMetric(
-            "total",
-            "Total Tokens",
-            "tokenSummary.total.toLocaleString()",
-            "w-20",
-          )}
-          ${usageSummaryMetric(
-            "input",
-            "Input Tokens",
-            "tokenSummary.input.toLocaleString()",
-            "w-20",
-          )}
-          ${usageSummaryMetric(
-            "output",
-            "Output Tokens",
-            "tokenSummary.output.toLocaleString()",
-            "w-20",
-          )}
-          ${usageSummaryMetric(
-            "cacheCreation",
-            "Cache Write",
-            "tokenSummary.cacheCreation.toLocaleString()",
-            "w-20",
-          )}
-          ${usageSummaryMetric(
-            "cacheHitRate",
-            "Cache Hit Rate",
-            "formatHitRate(tokenSummary.cacheRead, tokenSummary.cacheCreation)",
-            "w-20",
-          )}
+        </div>
+
+        <div
+          x-show="searchUsageActiveProvider !== 'disabled'"
+          class="mt-6 pt-5 border-t border-white/5"
+        >
+          <div class="flex items-center gap-3 mb-4">
+            <span
+              class="text-xs font-medium text-gray-500 uppercase tracking-widest block"
+            >Search Usage — Per Key</span>
+            <template x-if="searchUsageLoading">
+              ${spinner("h-3.5 w-3.5 text-gray-500")}
+            </template>
+          </div>
+          <div style="height: 320px; position: relative;">
+            <template x-if="searchUsageLoading && !chartsReady">
+              <div class="absolute inset-0 flex items-center justify-center">
+                <div class="flex flex-col items-center gap-3">
+                  ${spinner("h-6 w-6 text-accent-cyan/60")}
+                  <span class="text-xs text-gray-500">Loading usage data…</span>
+                </div>
+              </div>
+            </template>
+            <canvas id="searchUsageChartByKey"></canvas>
+          </div>
         </div>
       </div>
     </div>
@@ -1308,7 +1430,7 @@ export function renderSettingsTab() {
                     />
                     <polyline points="14 2 14 8 20 8" />
                   </svg>
-                  <p class="text-sm text-white" x-text="importFile.name"></p>
+                  <p class="text-sm text-white break-all" x-text="importFile.name"></p>
                   <p
                     class="text-xs text-gray-500 mt-1"
                     x-text="'Exported: ' + (importPreview.exportedAt ? new Date(importPreview.exportedAt).toLocaleString() : 'unknown')"
@@ -1321,7 +1443,7 @@ export function renderSettingsTab() {
 
           <template x-if="importPreview.ready">
             <div>
-              <div class="grid grid-cols-3 gap-3 mb-4">
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                 <div class="bg-surface-800 rounded-lg p-3 text-center">
                   <p class="text-xs text-gray-500 mb-1">API Keys</p>
                   <p
@@ -1346,9 +1468,17 @@ export function renderSettingsTab() {
                   >
                   </p>
                 </div>
+                <div class="bg-surface-800 rounded-lg p-3 text-center">
+                  <p class="text-xs text-gray-500 mb-1">Search Usage Records</p>
+                  <p
+                    class="text-lg font-bold font-mono text-white"
+                    x-text="importPreview.searchUsage"
+                  >
+                  </p>
+                </div>
               </div>
 
-              <div class="flex gap-3 mb-4">
+              <div class="flex flex-col gap-3 mb-4 sm:flex-row">
                 <button
                   @click="importMode = 'merge'"
                   class="flex-1 p-3 rounded-lg border text-left transition-all"
@@ -1394,7 +1524,7 @@ export function renderSettingsTab() {
 
               <button
                 @click="doImport()"
-                class="btn-primary"
+                class="btn-primary w-full sm:w-auto"
                 :disabled="importLoading"
                 :class="importMode === 'replace' ? 'bg-red-500/80 hover:bg-red-500' : ''"
               >
@@ -1433,137 +1563,275 @@ export function renderModelsTab() {
       x-transition:enter-start="opacity-0"
       x-transition:enter-end="opacity-100"
     >
-      <div class="glass-card glow-border animate-in" style="height: calc(100vh - 140px); display: flex; overflow: hidden;">
+      <div
+        class="glass-card glow-border animate-in flex h-[calc(100dvh-130px)] min-h-[560px] flex-col overflow-hidden lg:h-[calc(100vh-140px)] lg:flex-row"
+      >
         <!-- Left: Model list -->
-        <div class="w-72 border-r border-white/[0.06] flex flex-col shrink-0">
+        <div class="max-h-56 w-full shrink-0 border-b border-white/[0.06] flex flex-col lg:max-h-none lg:w-72 lg:border-b-0 lg:border-r">
           <div class="p-3 border-b border-white/[0.06]">
-            <input type="text" x-model="modelsSearch" placeholder="Filter models\u2026"
-              style="padding:8px 12px; font-size:12px; border-radius:8px;" />
+            <input
+              type="text"
+              x-model="modelsSearch"
+              placeholder="Filter models..."
+              style="padding:8px 12px; font-size:12px; border-radius:8px;"
+            />
           </div>
           <div class="flex-1 overflow-y-auto">
-            <template x-for="(m, i) in filteredChatModels" :key="m.id || ('div-'+i)">
+            <template
+              x-for="(m, i) in filteredChatModels"
+              :key="m.id || ('div-'+i)"
+            >
               <div>
-                <div x-show="m._divider" class="border-t border-white/[0.1] mx-3 my-1"></div>
+                <div
+                  x-show="m._divider"
+                  class="border-t border-white/[0.1] mx-3 my-1"
+                >
+                </div>
                 <button
                   x-show="!m._divider"
                   @click="selectChatModel(m.id)"
-                  class="w-full text-left px-4 py-2.5 transition-colors border-l-2"
+                  class="w-full min-h-11 text-left px-4 py-2.5 transition-colors border-l-2"
                   :class="[chatModelId === m.id
                     ? 'bg-accent-cyanGlow text-accent-cyan border-l-accent-cyan'
                     : 'text-gray-400 hover:bg-white/[0.03] hover:text-gray-200 border-l-transparent',
                     (() => { const next = filteredChatModels[i+1]; return next && !next._divider ? 'border-b border-white/[0.03]' : ''; })()]"
+                  >
+                    <div
+                      class="text-[13px] truncate"
+                      :class="chatModelId === m.id ? 'text-white' : 'text-gray-300'"
+                      x-text="m.name"
+                    >
+                    </div>
+                    <div
+                      class="text-[11px] font-mono truncate mt-0.5 opacity-60"
+                      x-text="m.id"
+                    >
+                    </div>
+                  </button>
+                </div>
+              </template>
+              <div
+                x-show="filteredChatModels.length === 0"
+                class="p-4 text-center text-gray-600 text-xs"
+              >
+                No models found
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Info + Chat -->
+          <div class="flex-1 flex flex-col min-w-0 min-h-0">
+            <!-- Model info bar -->
+            <div
+              x-show="chatModelInfo"
+              class="shrink-0 p-4 border-b border-white/[0.06]"
+            >
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                  <h3
+                    class="text-sm font-semibold text-white"
+                    x-text="chatModelInfo?.name"
+                  >
+                  </h3>
+                  <p class="text-[11px] text-gray-500 mt-0.5 break-all">
+                    <span class="font-mono" x-text="chatModelInfo?.id"></span>
+                    <span class="mx-1 text-gray-700">/</span>
+                    <span
+                      x-text="chatModelInfo?.capabilities?.family"
+                      class="text-accent-cyan"
+                    ></span>
+                  </p>
+                </div>
+                <button
+                  @click="clearChat()"
+                  class="btn-ghost text-[11px] flex shrink-0 items-center gap-1"
+                  :disabled="chatMessages.length === 0"
                 >
-                  <div class="text-[13px] truncate" :class="chatModelId === m.id ? 'text-white' : 'text-gray-300'" x-text="m.name"></div>
-                  <div class="text-[11px] font-mono truncate mt-0.5 opacity-60" x-text="m.id"></div>
+                  <svg
+                    class="w-3 h-3"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"
+                    />
+                  </svg>
+                  Clear
                 </button>
               </div>
-            </template>
-            <div x-show="filteredChatModels.length === 0" class="p-4 text-center text-gray-600 text-xs">
-              No models found
-            </div>
-          </div>
-        </div>
-
-        <!-- Right: Info + Chat -->
-        <div class="flex-1 flex flex-col min-w-0">
-          <!-- Model info bar -->
-          <div x-show="chatModelInfo" class="shrink-0 p-4 border-b border-white/[0.06]">
-            <div class="flex items-start justify-between gap-4">
-              <div>
-                <h3 class="text-sm font-semibold text-white" x-text="chatModelInfo?.name"></h3>
-                <p class="text-[11px] text-gray-500 mt-0.5">
-                  <span class="font-mono" x-text="chatModelInfo?.id"></span>
-                  <span class="mx-1 text-gray-700">/</span>
-                  <span x-text="chatModelInfo?.capabilities?.family" class="text-accent-cyan"></span>
-                </p>
-              </div>
-              <button @click="clearChat()" class="btn-ghost text-[11px] flex items-center gap-1" :disabled="chatMessages.length === 0">
-                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                Clear
-              </button>
-            </div>
-            <div class="flex flex-wrap gap-1.5 mt-2">
-              <template x-if="chatModelInfo?.capabilities?.limits?.max_prompt_tokens">
-                <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-600 text-gray-400">
-                  prompt: <span x-text="Math.round(chatModelInfo.capabilities.limits.max_prompt_tokens/1000)+'K'"></span>
-                </span>
-              </template>
-              <template x-if="chatModelInfo?.capabilities?.limits?.max_output_tokens">
-                <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-600 text-gray-400">
-                  output: <span x-text="Math.round(chatModelInfo.capabilities.limits.max_output_tokens/1000)+'K'"></span>
-                </span>
-              </template>
-              <template x-for="cap in chatModelCaps" :key="cap">
-                <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-cyanGlow text-accent-cyanDim" x-text="cap"></span>
-              </template>
-              <template x-for="ep in (chatModelInfo?.supported_endpoints || [])" :key="ep">
-                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-surface-700 text-gray-500" x-text="ep"></span>
-              </template>
-            </div>
-          </div>
-
-          <div x-show="!chatModelInfo" class="flex-1 flex items-center justify-center text-gray-600 text-sm">
-            Select a model to begin
-          </div>
-
-          <!-- Chat messages -->
-          <div x-show="chatModelInfo" class="flex-1 overflow-y-auto p-4 space-y-3" x-ref="chatScroll">
-            <div x-show="chatMessages.length === 0 && !chatSending" class="flex items-center justify-center h-full text-gray-600 text-xs">
-              Send a message to start chatting
-            </div>
-            <template x-for="(msg, i) in chatMessages" :key="i">
-              <div class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
-                <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm break-words"
-                  :class="msg.role === 'user'
-                    ? 'bg-accent-cyan/10 text-gray-200 rounded-br-md'
-                    : 'bg-surface-600 text-gray-300 rounded-bl-md'"
-                ><template x-if="msg.imageUrl"><img :src="msg.imageUrl" class="max-w-full max-h-48 rounded-lg mb-2" /></template><span x-text="msg.text" style="white-space: pre-wrap;"></span></div>
-              </div>
-            </template>
-            <div x-show="chatSending && (chatMessages.length === 0 || chatMessages[chatMessages.length-1].role === 'user')" class="flex justify-start">
-              <div class="bg-surface-600 rounded-2xl rounded-bl-md px-4 py-2.5">
-                <span class="inline-flex gap-1">
-                  <span class="w-1.5 h-1.5 bg-accent-cyan rounded-full animate-bounce" style="animation-delay:0s"></span>
-                  <span class="w-1.5 h-1.5 bg-accent-cyan rounded-full animate-bounce" style="animation-delay:0.15s"></span>
-                  <span class="w-1.5 h-1.5 bg-accent-cyan rounded-full animate-bounce" style="animation-delay:0.3s"></span>
-                </span>
+              <div class="flex flex-wrap gap-1.5 mt-2">
+                <template
+                  x-if="chatModelInfo?.capabilities?.limits?.max_prompt_tokens"
+                >
+                  <span
+                    class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-600 text-gray-400"
+                  >
+                    prompt: <span
+                      x-text="Math.round(chatModelInfo.capabilities.limits.max_prompt_tokens/1000)+'K'"
+                    ></span>
+                  </span>
+                </template>
+                <template
+                  x-if="chatModelInfo?.capabilities?.limits?.max_output_tokens"
+                >
+                  <span
+                    class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-600 text-gray-400"
+                  >
+                    output: <span
+                      x-text="Math.round(chatModelInfo.capabilities.limits.max_output_tokens/1000)+'K'"
+                    ></span>
+                  </span>
+                </template>
+                <template x-for="cap in chatModelCaps" :key="cap">
+                  <span
+                    class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-accent-cyanGlow text-accent-cyanDim"
+                    x-text="cap"
+                  ></span>
+                </template>
+                <template
+                  x-for="ep in (chatModelInfo?.supported_endpoints || [])"
+                  :key="ep"
+                >
+                  <span
+                    class="text-[10px] font-mono px-2 py-0.5 rounded bg-surface-700 text-gray-500"
+                    x-text="ep"
+                  ></span>
+                </template>
               </div>
             </div>
-          </div>
 
-          <!-- Input -->
-          <div x-show="chatModelInfo" class="shrink-0 p-3 border-t border-white/[0.06]">
-            <div class="flex items-center gap-2 mb-2" x-show="chatShowImage">
-              <input type="text" x-model="chatImageUrl" placeholder="Image URL (optional)"
-                style="padding:6px 10px; font-size:11px; border-radius:8px;" />
-              <button @click="chatShowImage = false; chatImageUrl = ''" class="text-gray-600 hover:text-gray-400 text-[11px]">cancel</button>
+            <div
+              x-show="!chatModelInfo"
+              class="flex-1 flex items-center justify-center text-gray-600 text-sm"
+            >
+              Select a model to begin
             </div>
-            <div class="flex gap-2">
-              <button @click="chatShowImage = !chatShowImage"
-                class="shrink-0 p-2 rounded-lg bg-surface-600 text-gray-500 hover:text-accent-cyan transition-colors" title="Attach image URL">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-              </button>
-              <textarea
-                x-model="chatInput"
-                @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); sendChatMessage(); }"
-                placeholder="Type a message\u2026 (Shift+Enter for newline)"
-                rows="2"
-                style="font-size:13px; padding:10px 14px; min-height:42px; max-height:200px;"
-                :disabled="chatSending"
-              ></textarea>
-              <button
-                @click="sendChatMessage()"
-                :disabled="chatSending || (!chatInput.trim() && !chatImageUrl.trim())"
-                class="btn-primary shrink-0 flex items-center gap-1"
-                style="padding:8px 16px; border-radius:10px; font-size:13px;"
+
+            <!-- Chat messages -->
+            <div
+              x-show="chatModelInfo"
+              class="flex-1 overflow-y-auto p-4 space-y-3"
+              x-ref="chatScroll"
+            >
+              <div
+                x-show="chatMessages.length === 0 && !chatSending"
+                class="flex items-center justify-center h-full text-gray-600 text-xs"
               >
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-                <span x-text="chatSending ? '\u2026' : 'Send'"></span>
-              </button>
+                Send a message to start chatting
+              </div>
+              <template x-for="(msg, i) in chatMessages" :key="i">
+                <div
+                  class="flex"
+                  :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+                >
+                  <div
+                    class="max-w-[86%] sm:max-w-[75%] rounded-2xl px-4 py-2.5 text-sm break-words"
+                    :class="msg.role === 'user'
+                      ? 'bg-accent-cyan/10 text-gray-200 rounded-br-md'
+                      : 'bg-surface-600 text-gray-300 rounded-bl-md'"
+                    >
+                      <template x-if="msg.imageUrl"><img
+                        :src="msg.imageUrl"
+                        class="max-w-full max-h-48 rounded-lg mb-2"
+                      /></template><span
+                      x-text="msg.text"
+                      style="white-space: pre-wrap;"
+                    ></span>
+                  </div>
+                </div>
+              </template>
+              <div
+                x-show="chatSending && (chatMessages.length === 0 || chatMessages[chatMessages.length-1].role === 'user')"
+                class="flex justify-start"
+              >
+                <div class="bg-surface-600 rounded-2xl rounded-bl-md px-4 py-2.5">
+                  <span class="inline-flex gap-1">
+                    <span
+                      class="w-1.5 h-1.5 bg-accent-cyan rounded-full animate-bounce"
+                      style="animation-delay:0s"
+                    ></span>
+                    <span
+                      class="w-1.5 h-1.5 bg-accent-cyan rounded-full animate-bounce"
+                      style="animation-delay:0.15s"
+                    ></span>
+                    <span
+                      class="w-1.5 h-1.5 bg-accent-cyan rounded-full animate-bounce"
+                      style="animation-delay:0.3s"
+                    ></span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Input -->
+            <div
+              x-show="chatModelInfo"
+              class="shrink-0 p-3 border-t border-white/[0.06]"
+            >
+              <div class="flex flex-col gap-2 mb-2 sm:flex-row sm:items-center" x-show="chatShowImage">
+                <input
+                  type="text"
+                  x-model="chatImageUrl"
+                  placeholder="Image URL (optional)"
+                  style="padding:6px 10px; font-size:11px; border-radius:8px;"
+                />
+                <button
+                  @click="chatShowImage = false; chatImageUrl = ''"
+                  class="text-gray-600 hover:text-gray-400 text-[11px] self-start sm:self-auto"
+                >
+                  cancel
+                </button>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  @click="chatShowImage = !chatShowImage"
+                  class="shrink-0 min-h-11 min-w-11 p-2 rounded-lg bg-surface-600 text-gray-500 hover:text-accent-cyan transition-colors inline-flex items-center justify-center"
+                  aria-label="Attach image URL"
+                  title="Attach image URL"
+                >
+                  <svg
+                    class="w-4 h-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <path d="M21 15l-5-5L5 21" />
+                  </svg>
+                </button>
+                <textarea
+                  x-model="chatInput"
+                  @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); sendChatMessage(); }"
+                  placeholder="Type a message..."
+                  rows="2"
+                  style="font-size:13px; padding:10px 14px; min-height:42px; max-height:200px;"
+                  :disabled="chatSending"
+                ></textarea>
+                <button
+                  @click="sendChatMessage()"
+                  :disabled="chatSending || (!chatInput.trim() && !chatImageUrl.trim())"
+                  class="btn-primary shrink-0 flex items-center gap-1"
+                  style="padding:8px 16px; border-radius:10px; font-size:13px;"
+                >
+                  <svg
+                    class="w-4 h-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                  </svg>
+                  <span x-text="chatSending ? '\\u2026' : 'Send'"></span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  `;
-}
+    `;
+  }

@@ -1,11 +1,12 @@
 import type { Context } from "hono";
 import type {
   MessagesPayload,
-  MessagesResponse,
+  MessagesStreamEventData,
 } from "../../../../lib/messages-types.ts";
 import { getGithubCredentials } from "../../../../lib/github.ts";
 import { normalizeMessagesRequest } from "./normalize/request.ts";
 import { planMessagesRequest } from "./plan.ts";
+import { getModelCapabilities } from "../../shared/models/get-model-capabilities.ts";
 import { buildTargetRequest as buildChatTargetRequest } from "../../translate/messages-via-chat-completions/build-target-request.ts";
 import { buildTargetRequest as buildResponsesTargetRequest } from "../../translate/messages-via-responses/build-target-request.ts";
 import { emitToMessages } from "../../targets/messages/emit.ts";
@@ -19,14 +20,14 @@ import {
   type StreamExecuteResult,
 } from "../../shared/errors/result.ts";
 import { toInternalDebugError } from "../../shared/errors/internal-debug-error.ts";
-import type { StreamFrame } from "../../shared/stream/types.ts";
+import type { ProtocolFrame } from "../../shared/stream/types.ts";
 
 const withTranslatedEvents = <T>(
   result: StreamExecuteResult<T>,
   translate: (
-    events: AsyncIterable<StreamFrame<T>>,
-  ) => AsyncIterable<StreamFrame<MessagesResponse>>,
-): StreamExecuteResult<MessagesResponse> =>
+    events: AsyncIterable<ProtocolFrame<T>>,
+  ) => AsyncIterable<ProtocolFrame<MessagesStreamEventData>>,
+): StreamExecuteResult<MessagesStreamEventData> =>
   result.type === "events"
     ? { type: "events", events: translate(result.events) }
     : result;
@@ -38,14 +39,20 @@ export const serveMessages = async (
     const payload = await c.req.json<MessagesPayload>();
     normalizeMessagesRequest(payload);
     c.set("model", payload.model || "unknown");
+    const apiKeyId = c.get("apiKeyId") as string | undefined;
 
     const { token: githubToken, accountType } = await getGithubCredentials(c.get("githubAccountId") as number | undefined);
-    const plan = await planMessagesRequest(
-      payload,
+    const capabilities = await getModelCapabilities(
+      payload.model,
       githubToken,
       accountType,
+    );
+    const plan = planMessagesRequest(
+      payload,
+      capabilities,
       c.req.header("anthropic-beta"),
     );
+    payload.model = capabilities.model?.id ?? payload.model;
 
     if (plan.target === "messages") {
       return await respondMessages(
@@ -55,6 +62,7 @@ export const serveMessages = async (
           payload,
           githubToken,
           accountType,
+          apiKeyId,
           fetchOptions: plan.fetchOptions,
           rawBeta: plan.rawBeta,
         }),
@@ -68,6 +76,7 @@ export const serveMessages = async (
         payload: buildResponsesTargetRequest(payload),
         githubToken,
         accountType,
+        apiKeyId,
         fetchOptions: plan.fetchOptions,
       });
 
@@ -83,6 +92,7 @@ export const serveMessages = async (
       payload: buildChatTargetRequest(payload),
       githubToken,
       accountType,
+      apiKeyId,
       fetchOptions: plan.fetchOptions,
     });
 
