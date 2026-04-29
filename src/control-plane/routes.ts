@@ -27,6 +27,7 @@ import {
 } from "./search-config/routes.ts";
 import { searchUsage } from "./search-usage/routes.ts";
 import { tokenUsage } from "./token-usage/routes.ts";
+import { errorLog } from "./error-log/routes.ts";
 import { models } from "../data-plane/models/serve.ts";
 
 export const mountControlPlane = (app: Hono) => {
@@ -62,5 +63,6 @@ export const mountControlPlane = (app: Hono) => {
   adminApi.post("/search-config/test", testSearchConfigRoute);
   adminApi.get("/export", exportData);
   adminApi.post("/import", importData);
+  adminApi.get("/error-log", errorLog);
   app.route("/api", adminApi);
 };

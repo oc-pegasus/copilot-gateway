@@ -2,6 +2,7 @@ import { html } from "hono/html";
 import { dashboardAssets } from "./dashboard/client.tsx";
 import {
   renderDashboardHeader,
+  renderErrorsTab,
   renderKeysTab,
   renderModelsTab,
   renderSettingsTab,
@@ -27,7 +28,7 @@ export function DashboardPage() {
         ${renderDashboardHeader()}
 
         <main class="max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-5 pb-8">
-          ${renderUpstreamTab()} ${renderKeysTab()} ${renderUsageTab()} ${renderModelsTab()} ${renderSettingsTab()}
+          ${renderUpstreamTab()} ${renderKeysTab()} ${renderUsageTab()} ${renderErrorsTab()} ${renderModelsTab()} ${renderSettingsTab()}
         </main>
       </div>
 

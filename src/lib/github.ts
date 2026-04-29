@@ -1,4 +1,5 @@
 import { getRepo } from "../repo/index.ts";
+import { isCoolingDown } from "./account-cooldown.ts";
 
 export interface GitHubUser {
   login: string;
@@ -10,6 +11,12 @@ export interface GitHubUser {
 interface GithubCredentials {
   token: string;
   accountType: string;
+}
+
+export interface CredentialResult {
+  token: string;
+  accountType: string;
+  accountId: number;
 }
 
 export function listGithubAccounts() {
@@ -65,4 +72,34 @@ export async function getGithubCredentials(githubAccountId?: number): Promise<Gi
   const account = await getActiveGithubAccount();
   if (!account) throw new Error("No GitHub account connected — add one via the dashboard");
   return { token: account.token, accountType: account.accountType };
+}
+
+export async function getGithubCredentialsWithFallback(
+  preferredAccountId?: number,
+): Promise<CredentialResult> {
+  const accounts = await listGithubAccounts();
+  if (accounts.length === 0) {
+    throw new Error("No GitHub account connected — add one via the dashboard");
+  }
+
+  const preferredId = preferredAccountId ?? (await getRepo().github.getActiveId());
+
+  if (preferredId != null) {
+    const preferred = accounts.find((a) => a.user.id === preferredId);
+    if (preferred && !isCoolingDown(preferredId)) {
+      return { token: preferred.token, accountType: preferred.accountType, accountId: preferredId };
+    }
+  }
+
+  for (const account of accounts) {
+    if (!isCoolingDown(account.user.id)) {
+      return { token: account.token, accountType: account.accountType, accountId: account.user.id };
+    }
+  }
+
+  // All accounts in cooldown — use preferred anyway
+  const fallback = preferredId != null
+    ? accounts.find((a) => a.user.id === preferredId) ?? accounts[0]
+    : accounts[0];
+  return { token: fallback.token, accountType: fallback.accountType, accountId: fallback.user.id };
 }

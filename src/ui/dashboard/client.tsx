@@ -15,7 +15,7 @@ export function dashboardAssets() {
     <script>
     function dashboardApp() {
     const isAdmin = localStorage.getItem('isAdmin') === '1';
-    const TABS = isAdmin ? ['upstream', 'keys', 'usage', 'models', 'settings'] : ['keys', 'usage', 'models'];
+    const TABS = isAdmin ? ['upstream', 'keys', 'usage', 'errors', 'models', 'settings'] : ['keys', 'usage', 'models'];
     const defaultTab = isAdmin ? 'upstream' : 'keys';
     const initTab = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : defaultTab;
 
@@ -323,6 +323,9 @@ export function dashboardAssets() {
                 searchConfigTesting: false,
                 searchConfigTestResult: null,
                 _chatAbort: null,
+                errorEntries: [],
+                errorsLoading: false,
+                errorRange: 'today',
 
                 get baseUrl() { return location.origin; },
 
@@ -517,6 +520,9 @@ export function dashboardAssets() {
                         await this.loadKeys();
                       } else if (t === 'models') {
                         if (this.allModels.length === 0) await this.loadAllModels();
+                      } else if (t === 'errors') {
+                        await this.loadErrors();
+                        if (!this.meLoaded) this.loadMe();
                       }
                     },
 
@@ -1716,6 +1722,53 @@ export function dashboardAssets() {
                             this._chatAbort = null;
                             this.scrollChat();
                           }
+                        },
+
+                        // ---- Errors tab ----
+
+                        errorAccountName(accountId) {
+                          const acct = this.githubAccounts.find(a => a.id === accountId);
+                          return acct ? '@' + acct.login : '#' + accountId;
+                        },
+
+                        errorRangeParams() {
+                          const now = new Date();
+                          const rangeStart = new Date(now);
+                          if (this.errorRange === 'today') {
+                            rangeStart.setTime(now.getTime() - 24 * 3600000);
+                          } else if (this.errorRange === '7d') {
+                            rangeStart.setDate(rangeStart.getDate() - 7);
+                          } else {
+                            rangeStart.setDate(rangeStart.getDate() - 30);
+                          }
+                          return {
+                            start: rangeStart.toISOString().slice(0, 19),
+                            end: new Date(now.getTime() + 60000).toISOString().slice(0, 19),
+                          };
+                        },
+
+                        async loadErrors() {
+                          this.errorsLoading = true;
+                          try {
+                            const range = this.errorRangeParams();
+                            const resp = await fetch('/api/error-log?start=' + encodeURIComponent(range.start) + '&end=' + encodeURIComponent(range.end) + '&limit=500', { headers: this.authHeaders() });
+                            if (resp.status === 401) {
+                              this.logout();
+                              return;
+                            }
+                            if (resp.ok) {
+                              this.errorEntries = await resp.json();
+                            }
+                          } catch (e) {
+                            console.error('loadErrors:', e);
+                          } finally {
+                            this.errorsLoading = false;
+                          }
+                        },
+
+                        switchErrorRange(range) {
+                          this.errorRange = range;
+                          this.loadErrors();
                         },
 
                         logout() {

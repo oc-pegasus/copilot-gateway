@@ -3,7 +3,6 @@ import type {
   MessagesPayload,
   MessagesStreamEventData,
 } from "../../../../lib/messages-types.ts";
-import { getGithubCredentials } from "../../../../lib/github.ts";
 import { normalizeMessagesRequest } from "./normalize/request.ts";
 import { planMessagesRequest } from "./plan.ts";
 import { getModelCapabilities } from "../../shared/models/get-model-capabilities.ts";
@@ -21,6 +20,7 @@ import {
 } from "../../shared/errors/result.ts";
 import { toInternalDebugError } from "../../shared/errors/internal-debug-error.ts";
 import type { ProtocolFrame } from "../../shared/stream/types.ts";
+import { withAccountFallback } from "../../with-fallback.ts";
 
 const withTranslatedEvents = <T>(
   result: StreamExecuteResult<T>,
@@ -40,67 +40,64 @@ export const serveMessages = async (
     normalizeMessagesRequest(payload);
     c.set("model", payload.model || "unknown");
     const apiKeyId = c.get("apiKeyId") as string | undefined;
+    let wantsStream = false;
 
-    const { token: githubToken, accountType } = await getGithubCredentials(c.get("githubAccountId") as number | undefined);
-    const capabilities = await getModelCapabilities(
-      payload.model,
-      githubToken,
-      accountType,
-    );
-    const plan = planMessagesRequest(
-      payload,
-      capabilities,
-      c.req.header("anthropic-beta"),
-    );
-    payload.model = capabilities.model?.id ?? payload.model;
-
-    if (plan.target === "messages") {
-      return await respondMessages(
-        c,
-        await emitToMessages({
-          sourceApi: "messages",
+    const { result } = await withAccountFallback(
+      c.get("githubAccountId") as number | undefined,
+      async (cred) => {
+        const capabilities = await getModelCapabilities(
+          payload.model,
+          cred.token,
+          cred.accountType,
+        );
+        const plan = planMessagesRequest(
           payload,
-          githubToken,
-          accountType,
+          capabilities,
+          c.req.header("anthropic-beta"),
+        );
+        wantsStream = plan.wantsStream;
+        payload.model = capabilities.model?.id ?? payload.model;
+
+        if (plan.target === "messages") {
+          return await emitToMessages({
+            sourceApi: "messages",
+            payload,
+            githubToken: cred.token,
+            accountType: cred.accountType,
+            apiKeyId,
+            fetchOptions: plan.fetchOptions,
+            rawBeta: plan.rawBeta,
+          });
+        }
+
+        if (plan.target === "responses") {
+          const result = await emitToResponses({
+            sourceApi: "messages",
+            payload: buildResponsesTargetRequest(payload),
+            githubToken: cred.token,
+            accountType: cred.accountType,
+            apiKeyId,
+            fetchOptions: plan.fetchOptions,
+          });
+
+          return withTranslatedEvents(result, translateResponsesToSourceEvents);
+        }
+
+        const result = await emitToChatCompletions({
+          sourceApi: "messages",
+          payload: buildChatTargetRequest(payload),
+          githubToken: cred.token,
+          accountType: cred.accountType,
           apiKeyId,
           fetchOptions: plan.fetchOptions,
-          rawBeta: plan.rawBeta,
-        }),
-        plan.wantsStream,
-      );
-    }
+        });
 
-    if (plan.target === "responses") {
-      const result = await emitToResponses({
-        sourceApi: "messages",
-        payload: buildResponsesTargetRequest(payload),
-        githubToken,
-        accountType,
-        apiKeyId,
-        fetchOptions: plan.fetchOptions,
-      });
-
-      return await respondMessages(
-        c,
-        withTranslatedEvents(result, translateResponsesToSourceEvents),
-        plan.wantsStream,
-      );
-    }
-
-    const result = await emitToChatCompletions({
-      sourceApi: "messages",
-      payload: buildChatTargetRequest(payload),
-      githubToken,
-      accountType,
-      apiKeyId,
-      fetchOptions: plan.fetchOptions,
-    });
-
-    return await respondMessages(
-      c,
-      withTranslatedEvents(result, translateChatToSourceEvents),
-      plan.wantsStream,
+        return withTranslatedEvents(result, translateChatToSourceEvents);
+      },
+      { apiKeyId, model: payload.model, endpoint: "/v1/messages" },
     );
+
+    return await respondMessages(c, result, wantsStream);
   } catch (error) {
     return await respondMessages(
       c,

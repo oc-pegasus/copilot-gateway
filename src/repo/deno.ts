@@ -2,6 +2,8 @@ import type {
   ApiKey,
   ApiKeyRepo,
   CacheRepo,
+  ErrorLogEntry,
+  ErrorLogRepo,
   GitHubAccount,
   GitHubRepo,
   Repo,
@@ -398,6 +400,25 @@ class DenoKvSearchConfigRepo implements SearchConfigRepo {
   }
 }
 
+class DenoKvErrorLogRepo implements ErrorLogRepo {
+  private entries: ErrorLogEntry[] = [];
+
+  log(entry: Omit<ErrorLogEntry, "timestamp">): Promise<void> {
+    this.entries.push({ ...entry, timestamp: new Date().toISOString() });
+    return Promise.resolve();
+  }
+
+  query(opts: { start: string; end: string; limit?: number }): Promise<ErrorLogEntry[]> {
+    const limit = opts.limit ?? 200;
+    return Promise.resolve(
+      this.entries
+        .filter((e) => e.timestamp >= opts.start && e.timestamp < opts.end)
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+        .slice(0, limit),
+    );
+  }
+}
+
 export class DenoKvRepo implements Repo {
   apiKeys: ApiKeyRepo;
   github: GitHubRepo;
@@ -405,6 +426,7 @@ export class DenoKvRepo implements Repo {
   searchUsage: SearchUsageRepo;
   cache: CacheRepo;
   searchConfig: SearchConfigRepo;
+  errorLog: ErrorLogRepo;
 
   constructor(kv: Deno.Kv) {
     this.apiKeys = new DenoKvApiKeyRepo(kv);
@@ -413,5 +435,6 @@ export class DenoKvRepo implements Repo {
     this.searchUsage = new DenoKvSearchUsageRepo(kv);
     this.cache = new DenoKvCacheRepo(kv);
     this.searchConfig = new DenoKvSearchConfigRepo(kv);
+    this.errorLog = new DenoKvErrorLogRepo();
   }
 }

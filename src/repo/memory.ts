@@ -4,6 +4,8 @@ import type {
   ApiKey,
   ApiKeyRepo,
   CacheRepo,
+  ErrorLogEntry,
+  ErrorLogRepo,
   GitHubAccount,
   GitHubRepo,
   Repo,
@@ -312,6 +314,25 @@ class MemorySearchConfigRepo implements SearchConfigRepo {
   }
 }
 
+class MemoryErrorLogRepo implements ErrorLogRepo {
+  private entries: ErrorLogEntry[] = [];
+
+  log(entry: Omit<ErrorLogEntry, "timestamp">): Promise<void> {
+    this.entries.push({ ...entry, timestamp: new Date().toISOString() });
+    return Promise.resolve();
+  }
+
+  query(opts: { start: string; end: string; limit?: number }): Promise<ErrorLogEntry[]> {
+    const limit = opts.limit ?? 200;
+    return Promise.resolve(
+      this.entries
+        .filter((e) => e.timestamp >= opts.start && e.timestamp < opts.end)
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+        .slice(0, limit),
+    );
+  }
+}
+
 export class InMemoryRepo implements Repo {
   apiKeys: ApiKeyRepo;
   github: GitHubRepo;
@@ -319,6 +340,7 @@ export class InMemoryRepo implements Repo {
   searchUsage: SearchUsageRepo;
   cache: CacheRepo;
   searchConfig: SearchConfigRepo;
+  errorLog: ErrorLogRepo;
 
   constructor() {
     this.apiKeys = new MemoryApiKeyRepo();
@@ -327,5 +349,6 @@ export class InMemoryRepo implements Repo {
     this.searchUsage = new MemorySearchUsageRepo();
     this.cache = new MemoryCacheRepo();
     this.searchConfig = new MemorySearchConfigRepo();
+    this.errorLog = new MemoryErrorLogRepo();
   }
 }

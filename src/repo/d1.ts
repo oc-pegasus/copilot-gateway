@@ -2,6 +2,8 @@ import type {
   ApiKey,
   ApiKeyRepo,
   CacheRepo,
+  ErrorLogEntry,
+  ErrorLogRepo,
   GitHubAccount,
   GitHubRepo,
   Repo,
@@ -527,6 +529,56 @@ class D1SearchConfigRepo implements SearchConfigRepo {
   }
 }
 
+class D1ErrorLogRepo implements ErrorLogRepo {
+  constructor(private db: D1Database) {}
+
+  async log(entry: Omit<ErrorLogEntry, "timestamp">): Promise<void> {
+    await this.db
+      .prepare(
+        "INSERT INTO error_log (account_id, api_key_id, model, endpoint, status_code, error_body, was_fallback) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .bind(
+        entry.accountId,
+        entry.apiKeyId,
+        entry.model,
+        entry.endpoint,
+        entry.statusCode,
+        entry.errorBody,
+        entry.wasFallback ? 1 : 0,
+      )
+      .run();
+  }
+
+  async query(opts: { start: string; end: string; limit?: number }): Promise<ErrorLogEntry[]> {
+    const limit = opts.limit ?? 200;
+    const { results } = await this.db
+      .prepare(
+        "SELECT timestamp, account_id, api_key_id, model, endpoint, status_code, error_body, was_fallback FROM error_log WHERE timestamp >= ? AND timestamp < ? ORDER BY timestamp DESC LIMIT ?",
+      )
+      .bind(opts.start, opts.end, limit)
+      .all<{
+        timestamp: string;
+        account_id: number | null;
+        api_key_id: string | null;
+        model: string | null;
+        endpoint: string;
+        status_code: number;
+        error_body: string | null;
+        was_fallback: number;
+      }>();
+    return results.map((r) => ({
+      timestamp: r.timestamp,
+      accountId: r.account_id,
+      apiKeyId: r.api_key_id,
+      model: r.model,
+      endpoint: r.endpoint,
+      statusCode: r.status_code,
+      errorBody: r.error_body,
+      wasFallback: r.was_fallback === 1,
+    }));
+  }
+}
+
 export class D1Repo implements Repo {
   apiKeys: ApiKeyRepo;
   github: GitHubRepo;
@@ -534,6 +586,7 @@ export class D1Repo implements Repo {
   searchUsage: SearchUsageRepo;
   cache: CacheRepo;
   searchConfig: SearchConfigRepo;
+  errorLog: ErrorLogRepo;
 
   constructor(db: D1Database) {
     this.apiKeys = new D1ApiKeyRepo(db);
@@ -542,5 +595,6 @@ export class D1Repo implements Repo {
     this.searchUsage = new D1SearchUsageRepo(db);
     this.cache = new D1CacheRepo(db);
     this.searchConfig = new D1SearchConfigRepo(db);
+    this.errorLog = new D1ErrorLogRepo(db);
   }
 }
