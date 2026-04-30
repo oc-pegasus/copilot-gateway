@@ -1993,7 +1993,7 @@ export function renderErrorsTab() {
                   <template x-for="entry in errorEntries" :key="entry.id">
                     <tr class="border-b border-white/[0.03] hover:bg-white/[0.02]">
                       <td class="py-2.5 px-3">
-                        <span class="text-gray-400 text-xs font-mono" x-text="entry.timestamp"></span>
+                        <span class="text-gray-400 text-xs font-mono" x-text="new Date(entry.timestamp + 'Z').toLocaleString()"></span>
                       </td>
                       <td class="py-2.5 px-3">
                         <span class="text-gray-300 text-xs" x-text="entry.accountId ?? '—'"></span>
