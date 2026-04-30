@@ -9,4 +9,4 @@ CREATE TABLE IF NOT EXISTS error_log (
   error_body TEXT,
   was_fallback INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX idx_error_log_timestamp ON error_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_error_log_timestamp ON error_log(timestamp);
