@@ -907,7 +907,7 @@ export function renderKeysTab() {
                     Last Used
                   </th>
                   <th
-                    x-show="isAdmin && githubAccounts.length > 1"
+                    x-show="isAdmin && githubAccounts.length > 0"
                     class="text-left py-2 pr-4 text-xs font-medium text-gray-500 uppercase tracking-widest"
                   >
                     Backend
@@ -960,7 +960,7 @@ export function renderKeysTab() {
                       <span x-show="!k.last_used_at" class="text-gray-600 text-xs"
                       >Never</span>
                     </td>
-                    <td x-show="isAdmin && githubAccounts.length > 1" class="py-3 pr-4">
+                    <td x-show="isAdmin && githubAccounts.length > 0" class="py-3 pr-4">
                       <select
                         @click.stop
                         @change.stop="updateKeyBackend(k.id, $event.target.value)"
