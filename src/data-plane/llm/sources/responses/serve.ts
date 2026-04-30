@@ -54,6 +54,7 @@ export const serveResponses = async (
     const payload = await c.req.json<ResponsesPayload>();
     normalizeResponsesRequest(payload);
     const apiKeyId = c.get("apiKeyId") as string | undefined;
+    const preferredAccountId = c.get("githubAccountId") as number | undefined;
     const wantsStream = payload.stream === true;
 
     const result = await withAccountFallback<
@@ -125,7 +126,7 @@ export const serveResponses = async (
         ),
         chatPayload.model,
       );
-    });
+    }, preferredAccountId);
 
     if (result instanceof Response) return result;
 

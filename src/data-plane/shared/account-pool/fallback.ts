@@ -115,6 +115,7 @@ const availableAccountsForModel = async (
 export async function withAccountFallback<T>(
   model: string,
   run: (ctx: AccountPoolAttemptContext) => Promise<T>,
+  preferredAccountId?: number,
 ): Promise<T> {
   const accounts = await getRepo().github.listAccounts();
   if (accounts.length === 0) {
@@ -126,6 +127,14 @@ export async function withAccountFallback<T>(
   if (attempts.length === 0) {
     await clearModelUnavailable(eligible, model);
     attempts = eligible;
+  }
+
+  if (preferredAccountId !== undefined) {
+    const preferredIndex = attempts.findIndex((a) => a.user.id === preferredAccountId);
+    if (preferredIndex > 0) {
+      const [preferred] = attempts.splice(preferredIndex, 1);
+      attempts.unshift(preferred);
+    }
   }
 
   let lastFailure: LastFailure<T> | null = null;

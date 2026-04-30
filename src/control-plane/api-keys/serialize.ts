@@ -6,4 +6,5 @@ export const apiKeyToJson = (key: ApiKey) => ({
   key: key.key,
   created_at: key.createdAt,
   last_used_at: key.lastUsedAt ?? null,
+  github_account_id: key.githubAccountId ?? null,
 });

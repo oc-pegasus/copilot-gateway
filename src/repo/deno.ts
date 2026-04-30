@@ -80,6 +80,21 @@ class DenoKvApiKeyRepo implements ApiKeyRepo {
       await this.kv.delete(entry.key);
     }
   }
+
+  async updateGithubAccountId(id: string, githubAccountId: number | null): Promise<boolean> {
+    const existing = await this.getById(id);
+    if (!existing) return false;
+    await this.save({ ...existing, githubAccountId: githubAccountId ?? undefined });
+    return true;
+  }
+
+  async clearGithubAccountId(accountId: number): Promise<void> {
+    for await (const entry of this.kv.list<ApiKey>({ prefix: ["api_keys"] })) {
+      if (entry.value.githubAccountId === accountId) {
+        await this.save({ ...entry.value, githubAccountId: undefined });
+      }
+    }
+  }
 }
 
 class DenoKvGitHubRepo implements GitHubRepo {

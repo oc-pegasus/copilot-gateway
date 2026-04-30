@@ -48,6 +48,22 @@ class MemoryApiKeyRepo implements ApiKeyRepo {
     this.store.clear();
     return Promise.resolve();
   }
+
+  updateGithubAccountId(id: string, githubAccountId: number | null): Promise<boolean> {
+    const existing = this.store.get(id);
+    if (!existing) return Promise.resolve(false);
+    this.store.set(id, { ...existing, githubAccountId: githubAccountId ?? undefined });
+    return Promise.resolve(true);
+  }
+
+  clearGithubAccountId(accountId: number): Promise<void> {
+    for (const [id, key] of this.store) {
+      if (key.githubAccountId === accountId) {
+        this.store.set(id, { ...key, githubAccountId: undefined });
+      }
+    }
+    return Promise.resolve();
+  }
 }
 
 class MemoryGitHubRepo implements GitHubRepo {

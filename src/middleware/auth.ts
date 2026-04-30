@@ -1,6 +1,6 @@
 import type { Context, Next } from "hono";
 import { getEnv } from "../lib/env.ts";
-import { validateApiKey } from "../lib/api-keys.ts";
+import { getApiKeyById, validateApiKey } from "../lib/api-keys.ts";
 
 const PUBLIC_PATHS = new Set(["/", "/dashboard", "/favicon.ico"]);
 const AUTH_VALIDATE_PATHS = new Set(["/auth/login"]);
@@ -42,6 +42,10 @@ export const authMiddleware = async (c: Context, next: Next) => {
     c.set("authKey", key);
     c.set("isAdmin", false);
     c.set("apiKeyId", result.id);
+    const fullKey = await getApiKeyById(result.id);
+    if (fullKey?.githubAccountId) {
+      c.set("githubAccountId", fullKey.githubAccountId);
+    }
     return next();
   }
 

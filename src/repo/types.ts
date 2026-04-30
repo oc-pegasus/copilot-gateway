@@ -6,6 +6,7 @@ export interface ApiKey {
   key: string;
   createdAt: string;
   lastUsedAt?: string;
+  githubAccountId?: number;
 }
 
 export interface GitHubAccount {
@@ -51,6 +52,8 @@ export interface ApiKeyRepo {
   save(key: ApiKey): Promise<void>;
   delete(id: string): Promise<boolean>;
   deleteAll(): Promise<void>;
+  updateGithubAccountId(id: string, githubAccountId: number | null): Promise<boolean>;
+  clearGithubAccountId(accountId: number): Promise<void>;
 }
 
 export interface GitHubRepo {

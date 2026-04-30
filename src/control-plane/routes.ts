@@ -6,6 +6,7 @@ import {
   listKeys,
   renameKey,
   rotateKey,
+  updateKey,
 } from "./api-keys/routes.ts";
 import {
   authGithub,
@@ -53,6 +54,7 @@ export const mountControlPlane = (app: Hono) => {
   adminApi.get("/copilot-quota", copilotQuota);
   adminApi.post("/keys", createKey);
   adminApi.post("/keys/:id/rotate", rotateKey);
+  adminApi.put("/keys/:id", updateKey);
   adminApi.patch("/keys/:id", renameKey);
   adminApi.delete("/keys/:id", deleteKey);
   adminApi.get("/search-config", getSearchConfigRoute);

@@ -907,6 +907,12 @@ export function renderKeysTab() {
                     Last Used
                   </th>
                   <th
+                    x-show="isAdmin && githubAccounts.length > 1"
+                    class="text-left py-2 pr-4 text-xs font-medium text-gray-500 uppercase tracking-widest"
+                  >
+                    Backend
+                  </th>
+                  <th
                     x-show="isAdmin"
                     class="text-right py-2 pr-2 text-xs font-medium text-gray-500 uppercase tracking-widest"
                   >
@@ -953,6 +959,22 @@ export function renderKeysTab() {
                       ></span>
                       <span x-show="!k.last_used_at" class="text-gray-600 text-xs"
                       >Never</span>
+                    </td>
+                    <td x-show="isAdmin && githubAccounts.length > 1" class="py-3 pr-4">
+                      <select
+                        @click.stop
+                        @change.stop="updateKeyBackend(k.id, $event.target.value)"
+                        class="text-xs font-mono bg-surface-800 text-gray-300 border border-white/10 rounded-lg px-2 py-1.5 outline-none focus:border-accent-cyan/50 cursor-pointer"
+                      >
+                        <option value="" :selected="!k.github_account_id">Default</option>
+                        <template x-for="acct in githubAccounts" :key="acct.id">
+                          <option
+                            :value="acct.id"
+                            :selected="k.github_account_id === acct.id"
+                            x-text="'@' + acct.login"
+                          ></option>
+                        </template>
+                      </select>
                     </td>
                     <td class="py-3 pr-2 text-right">
                       <div class="flex items-center justify-end gap-1">

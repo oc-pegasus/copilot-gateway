@@ -45,6 +45,7 @@ export const serveMessages = async (
     const payload = await c.req.json<MessagesPayload>();
     normalizeMessagesRequest(payload);
     const apiKeyId = c.get("apiKeyId") as string | undefined;
+    const preferredAccountId = c.get("githubAccountId") as number | undefined;
     const wantsStream = payload.stream === true;
     const rawBeta = c.req.header("anthropic-beta");
 
@@ -107,6 +108,7 @@ export const serveMessages = async (
           targetPayload.model,
         );
       },
+      preferredAccountId,
     );
 
     return await respondMessages(

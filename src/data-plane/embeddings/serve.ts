@@ -12,6 +12,7 @@ import {
 export const embeddings = async (c: Context) => {
   try {
     const body = await c.req.text();
+    const preferredAccountId = c.get("githubAccountId") as number | undefined;
     let model = "unknown";
     try {
       const parsed = JSON.parse(body) as { model?: unknown };
@@ -26,7 +27,7 @@ export const embeddings = async (c: Context) => {
         { method: "POST", body },
         account.token,
         account.accountType,
-      ));
+      ), preferredAccountId);
 
     return proxyJsonResponse(resp);
   } catch (e: unknown) {

@@ -25,6 +25,7 @@ export async function addGithubAccount(
 }
 
 export async function removeGithubAccount(userId: number): Promise<void> {
+  await getRepo().apiKeys.clearGithubAccountId(userId);
   await getRepo().github.deleteAccount(userId);
 }
 

@@ -506,6 +506,7 @@ export function dashboardAssets() {
                         this.loadMe().then(() => this.loadUsage());
                         this.loadSearchConfig();
                       } else if (this.tab === 'keys') {
+                        if (this.isAdmin) this.loadMe();
                         this.loadKeys();
                       } else if (this.tab === 'usage') {
                         this.loadUsageTabData(modelsReady);
@@ -544,6 +545,7 @@ export function dashboardAssets() {
                         this.searchUsageLoading = true;
                         await this.loadUsageTabData();
                       } else if (t === 'keys') {
+                        if (!this.meLoaded && this.isAdmin) await this.loadMe();
                         await this.loadKeys();
                       } else if (t === 'models') {
                         if (this.allModels.length === 0) await this.loadAllModels();
@@ -1023,6 +1025,28 @@ export function dashboardAssets() {
                           setTimeout(() => {
                             this.copied = false;
                           }, 2000);
+                        },
+
+                        async updateKeyBackend(id, value) {
+                          const githubAccountId = value === '' ? null : Number(value);
+                          try {
+                            const resp = await fetch('/api/keys/' + id, {
+                              method: 'PUT',
+                              headers: { ...this.authHeaders(), 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ github_account_id: githubAccountId }),
+                            });
+                            if (resp.status === 401) {
+                              this.logout();
+                              return;
+                            }
+                            if (resp.ok) {
+                              await this.loadKeys();
+                            } else {
+                              alert((await resp.json()).error || 'Failed to update backend');
+                            }
+                          } catch (e) {
+                            console.error('updateKeyBackend:', e);
+                          }
                         },
 
                         localHourKey(d) {

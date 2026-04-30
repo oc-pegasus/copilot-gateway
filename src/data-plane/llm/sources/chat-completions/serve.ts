@@ -48,6 +48,7 @@ export const serveChatCompletions = async (
     // Chat SSE exposes usage only when the caller requested `include_usage`.
     const includeUsageChunk = payload.stream_options?.include_usage === true;
     const apiKeyId = c.get("apiKeyId") as string | undefined;
+    const preferredAccountId = c.get("githubAccountId") as number | undefined;
     const wantsStream = payload.stream === true;
 
     const result = await withAccountFallback(
@@ -108,6 +109,7 @@ export const serveChatCompletions = async (
           attemptPayload.model,
         );
       },
+      preferredAccountId,
     );
 
     return await respondChatCompletions(
