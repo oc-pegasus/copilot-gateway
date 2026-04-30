@@ -4,6 +4,8 @@ import type {
   ApiKey,
   ApiKeyRepo,
   CacheRepo,
+  ErrorLogEntry,
+  ErrorLogRepo,
   GitHubAccount,
   GitHubRepo,
   Repo,
@@ -517,6 +519,30 @@ class DenoKvSearchConfigRepo implements SearchConfigRepo {
   }
 }
 
+// In-memory error log for Deno KV — error_log is an append-only table
+// with no KV-native equivalent; a simple array suffices for dev/test.
+class DenoKvErrorLogRepo implements ErrorLogRepo {
+  private entries: ErrorLogEntry[] = [];
+  private nextId = 1;
+
+  log(entry: Omit<ErrorLogEntry, "id" | "timestamp">): Promise<void> {
+    this.entries.push({
+      ...entry,
+      id: this.nextId++,
+      timestamp: new Date().toISOString().replace("T", " ").slice(0, 19),
+    });
+    return Promise.resolve();
+  }
+
+  query(opts: { start?: string; end?: string; limit?: number }): Promise<ErrorLogEntry[]> {
+    let result = [...this.entries];
+    if (opts.start) result = result.filter((e) => e.timestamp! >= opts.start!);
+    if (opts.end) result = result.filter((e) => e.timestamp! <= opts.end!);
+    result.sort((a, b) => b.timestamp!.localeCompare(a.timestamp!));
+    return Promise.resolve(result.slice(0, opts.limit ?? 200));
+  }
+}
+
 export class DenoKvRepo implements Repo {
   apiKeys: ApiKeyRepo;
   github: GitHubRepo;
@@ -525,6 +551,7 @@ export class DenoKvRepo implements Repo {
   cache: CacheRepo;
   accountModelBackoffs: AccountModelBackoffRepo;
   searchConfig: SearchConfigRepo;
+  errorLog: ErrorLogRepo;
 
   constructor(kv: Deno.Kv) {
     this.apiKeys = new DenoKvApiKeyRepo(kv);
@@ -534,5 +561,6 @@ export class DenoKvRepo implements Repo {
     this.cache = new DenoKvCacheRepo(kv);
     this.accountModelBackoffs = new DenoKvAccountModelBackoffRepo(kv);
     this.searchConfig = new DenoKvSearchConfigRepo(kv);
+    this.errorLog = new DenoKvErrorLogRepo();
   }
 }

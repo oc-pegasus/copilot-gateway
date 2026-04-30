@@ -129,6 +129,23 @@ export interface SearchConfigRepo {
   save(config: unknown): Promise<void>;
 }
 
+export interface ErrorLogEntry {
+  id?: number;
+  timestamp?: string;
+  accountId: number | null;
+  apiKeyId: string | null;
+  model: string | null;
+  endpoint: string;
+  statusCode: number;
+  errorBody: string | null;
+  wasFallback: boolean;
+}
+
+export interface ErrorLogRepo {
+  log(entry: Omit<ErrorLogEntry, "id" | "timestamp">): Promise<void>;
+  query(opts: { start?: string; end?: string; limit?: number }): Promise<ErrorLogEntry[]>;
+}
+
 export interface Repo {
   apiKeys: ApiKeyRepo;
   github: GitHubRepo;
@@ -137,4 +154,5 @@ export interface Repo {
   cache: CacheRepo;
   accountModelBackoffs: AccountModelBackoffRepo;
   searchConfig: SearchConfigRepo;
+  errorLog: ErrorLogRepo;
 }

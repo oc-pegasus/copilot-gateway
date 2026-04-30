@@ -27,7 +27,7 @@ export const embeddings = async (c: Context) => {
         { method: "POST", body },
         account.token,
         account.accountType,
-      ), preferredAccountId);
+      ), preferredAccountId, { endpoint: "/v1/embeddings" });
 
     return proxyJsonResponse(resp);
   } catch (e: unknown) {

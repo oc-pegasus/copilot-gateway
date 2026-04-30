@@ -110,6 +110,7 @@ export const serveChatCompletions = async (
         );
       },
       preferredAccountId,
+      { endpoint: "/v1/chat/completions", apiKeyId },
     );
 
     return await respondChatCompletions(

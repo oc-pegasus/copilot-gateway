@@ -6,6 +6,8 @@ import type {
   ApiKey,
   ApiKeyRepo,
   CacheRepo,
+  ErrorLogEntry,
+  ErrorLogRepo,
   GitHubAccount,
   GitHubRepo,
   Repo,
@@ -385,6 +387,28 @@ class MemorySearchConfigRepo implements SearchConfigRepo {
   }
 }
 
+class MemoryErrorLogRepo implements ErrorLogRepo {
+  private entries: ErrorLogEntry[] = [];
+  private nextId = 1;
+
+  log(entry: Omit<ErrorLogEntry, "id" | "timestamp">): Promise<void> {
+    this.entries.push({
+      ...entry,
+      id: this.nextId++,
+      timestamp: new Date().toISOString().replace("T", " ").slice(0, 19),
+    });
+    return Promise.resolve();
+  }
+
+  query(opts: { start?: string; end?: string; limit?: number }): Promise<ErrorLogEntry[]> {
+    let result = [...this.entries];
+    if (opts.start) result = result.filter((e) => e.timestamp! >= opts.start!);
+    if (opts.end) result = result.filter((e) => e.timestamp! <= opts.end!);
+    result.sort((a, b) => b.timestamp!.localeCompare(a.timestamp!));
+    return Promise.resolve(result.slice(0, opts.limit ?? 200));
+  }
+}
+
 export class InMemoryRepo implements Repo {
   apiKeys: ApiKeyRepo;
   github: GitHubRepo;
@@ -393,6 +417,7 @@ export class InMemoryRepo implements Repo {
   cache: CacheRepo;
   accountModelBackoffs: AccountModelBackoffRepo;
   searchConfig: SearchConfigRepo;
+  errorLog: ErrorLogRepo;
 
   constructor() {
     this.apiKeys = new MemoryApiKeyRepo();
@@ -402,5 +427,6 @@ export class InMemoryRepo implements Repo {
     this.cache = new MemoryCacheRepo();
     this.accountModelBackoffs = new MemoryAccountModelBackoffRepo();
     this.searchConfig = new MemorySearchConfigRepo();
+    this.errorLog = new MemoryErrorLogRepo();
   }
 }

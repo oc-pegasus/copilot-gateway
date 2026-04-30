@@ -19,6 +19,7 @@ import {
 } from "./auth/routes.ts";
 import { copilotQuota } from "./copilot-quota/routes.ts";
 import { exportData, importData } from "./data-transfer/routes.ts";
+import { errorLog } from "./error-log/routes.ts";
 import { mountPageRoutes } from "./pages/routes.ts";
 import {
   getSearchConfigRoute,
@@ -62,5 +63,6 @@ export const mountControlPlane = (app: Hono) => {
   adminApi.post("/search-config/test", testSearchConfigRoute);
   adminApi.get("/export", exportData);
   adminApi.post("/import", importData);
+  adminApi.get("/error-log", errorLog);
   app.route("/api", adminApi);
 };

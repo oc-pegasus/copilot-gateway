@@ -4,6 +4,8 @@ import type {
   ApiKey,
   ApiKeyRepo,
   CacheRepo,
+  ErrorLogEntry,
+  ErrorLogRepo,
   GitHubAccount,
   GitHubRepo,
   Repo,
@@ -674,6 +676,71 @@ class D1SearchConfigRepo implements SearchConfigRepo {
   }
 }
 
+class D1ErrorLogRepo implements ErrorLogRepo {
+  constructor(private db: D1Database) {}
+
+  async log(entry: Omit<ErrorLogEntry, "id" | "timestamp">): Promise<void> {
+    await this.db
+      .prepare(
+        "INSERT INTO error_log (account_id, api_key_id, model, endpoint, status_code, error_body, was_fallback) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .bind(
+        entry.accountId,
+        entry.apiKeyId,
+        entry.model,
+        entry.endpoint,
+        entry.statusCode,
+        entry.errorBody,
+        entry.wasFallback ? 1 : 0,
+      )
+      .run();
+  }
+
+  async query(
+    opts: { start?: string; end?: string; limit?: number },
+  ): Promise<ErrorLogEntry[]> {
+    const filters: string[] = [];
+    const binds: unknown[] = [];
+    if (opts.start) {
+      filters.push("timestamp >= ?");
+      binds.push(opts.start);
+    }
+    if (opts.end) {
+      filters.push("timestamp <= ?");
+      binds.push(opts.end);
+    }
+    const where = filters.length > 0 ? ` WHERE ${filters.join(" AND ")}` : "";
+    const limit = opts.limit ?? 200;
+    const { results } = await this.db
+      .prepare(
+        `SELECT id, timestamp, account_id, api_key_id, model, endpoint, status_code, error_body, was_fallback FROM error_log${where} ORDER BY timestamp DESC LIMIT ?`,
+      )
+      .bind(...binds, limit)
+      .all<{
+        id: number;
+        timestamp: string;
+        account_id: number | null;
+        api_key_id: string | null;
+        model: string | null;
+        endpoint: string;
+        status_code: number;
+        error_body: string | null;
+        was_fallback: number;
+      }>();
+    return results.map((r) => ({
+      id: r.id,
+      timestamp: r.timestamp,
+      accountId: r.account_id,
+      apiKeyId: r.api_key_id,
+      model: r.model,
+      endpoint: r.endpoint,
+      statusCode: r.status_code,
+      errorBody: r.error_body,
+      wasFallback: r.was_fallback === 1,
+    }));
+  }
+}
+
 export class D1Repo implements Repo {
   apiKeys: ApiKeyRepo;
   github: GitHubRepo;
@@ -682,6 +749,7 @@ export class D1Repo implements Repo {
   cache: CacheRepo;
   accountModelBackoffs: AccountModelBackoffRepo;
   searchConfig: SearchConfigRepo;
+  errorLog: ErrorLogRepo;
 
   constructor(db: D1Database) {
     this.apiKeys = new D1ApiKeyRepo(db);
@@ -691,5 +759,6 @@ export class D1Repo implements Repo {
     this.cache = new D1CacheRepo(db);
     this.accountModelBackoffs = new D1AccountModelBackoffRepo(db);
     this.searchConfig = new D1SearchConfigRepo(db);
+    this.errorLog = new D1ErrorLogRepo(db);
   }
 }

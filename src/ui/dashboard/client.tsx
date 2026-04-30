@@ -15,7 +15,7 @@ export function dashboardAssets() {
     <script>
     function dashboardApp() {
     const isAdmin = localStorage.getItem('isAdmin') === '1';
-    const TABS = isAdmin ? ['upstream', 'keys', 'usage', 'models', 'settings'] : ['keys', 'usage', 'models'];
+    const TABS = isAdmin ? ['upstream', 'keys', 'usage', 'models', 'settings', 'errors'] : ['keys', 'usage', 'models'];
     const defaultTab = isAdmin ? 'upstream' : 'keys';
     const initTab = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : defaultTab;
 
@@ -355,6 +355,9 @@ export function dashboardAssets() {
                 searchConfigSaving: false,
                 searchConfigTesting: false,
                 searchConfigTestResult: null,
+                errorEntries: [],
+                errorsLoading: false,
+                errorRange: 'today',
                 _chatAbort: null,
 
                 get baseUrl() { return location.origin; },
@@ -549,6 +552,8 @@ export function dashboardAssets() {
                         await this.loadKeys();
                       } else if (t === 'models') {
                         if (this.allModels.length === 0) await this.loadAllModels();
+                      } else if (t === 'errors') {
+                        await this.loadErrors();
                       }
                     },
 
@@ -1586,6 +1591,37 @@ export function dashboardAssets() {
                           if (!TOKEN_CHART_METRICS[metric] || this.tokenChartMetric === metric) return;
                           this.tokenChartMetric = metric;
                           this.refreshChartsData();
+                        },
+
+                        async loadErrors() {
+                          this.errorsLoading = true;
+                          try {
+                            const now = new Date();
+                            const rangeStart = new Date(now);
+                            if (this.errorRange === 'today') {
+                              rangeStart.setTime(now.getTime() - 24 * 3600000);
+                            } else if (this.errorRange === '7d') {
+                              rangeStart.setDate(rangeStart.getDate() - 7);
+                            } else {
+                              rangeStart.setDate(rangeStart.getDate() - 30);
+                            }
+                            const start = rangeStart.toISOString().replace('T', ' ').slice(0, 19);
+                            const end = now.toISOString().replace('T', ' ').slice(0, 19);
+                            const resp = await fetch('/api/error-log?start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end) + '&limit=500', { headers: this.authHeaders() });
+                            if (resp.status === 401) { this.logout(); return; }
+                            if (resp.ok) {
+                              this.errorEntries = await resp.json();
+                            }
+                          } catch (e) {
+                            console.error('loadErrors:', e);
+                          } finally {
+                            this.errorsLoading = false;
+                          }
+                        },
+
+                        switchErrorRange(range) {
+                          this.errorRange = range;
+                          this.loadErrors();
                         },
 
                         async exportData() {

@@ -112,10 +112,48 @@ const availableAccountsForModel = async (
     .map((check) => check.account);
 };
 
+const extractErrorBody = (result: unknown): string | null => {
+  const maybeResult = result as { body?: unknown };
+  if (typeof maybeResult?.body === "string") return maybeResult.body.slice(0, 4096);
+  if (maybeResult?.body && typeof maybeResult.body === "object") {
+    try {
+      return JSON.stringify(maybeResult.body).slice(0, 4096);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
+const logError = (
+  ctx: ErrorLogContext,
+  account: GitHubAccount,
+  model: string,
+  status: number,
+  errorBody: string | null,
+  wasFallback: boolean,
+): void => {
+  getRepo().errorLog.log({
+    accountId: account.user.id,
+    apiKeyId: ctx.apiKeyId ?? null,
+    model,
+    endpoint: ctx.endpoint,
+    statusCode: status,
+    errorBody,
+    wasFallback,
+  }).catch(() => {});
+};
+
+export interface ErrorLogContext {
+  endpoint: string;
+  apiKeyId?: string;
+}
+
 export async function withAccountFallback<T>(
   model: string,
   run: (ctx: AccountPoolAttemptContext) => Promise<T>,
   preferredAccountId?: number,
+  errorLogContext?: ErrorLogContext,
 ): Promise<T> {
   const accounts = await getRepo().github.listAccounts();
   if (accounts.length === 0) {
@@ -146,12 +184,19 @@ export async function withAccountFallback<T>(
       if (!status) return result;
 
       await markModelUnavailable(account, model, status);
+      if (errorLogContext) {
+        const errorBody = extractErrorBody(result);
+        logError(errorLogContext, account, model, status, errorBody, attempts.indexOf(account) > 0);
+      }
       lastFailure = { type: "result", result };
     } catch (error) {
       const status = switchableStatusFromError(error);
       if (!status) throw error;
 
       await markModelUnavailable(account, model, status);
+      if (errorLogContext) {
+        logError(errorLogContext, account, model, status, null, attempts.indexOf(account) > 0);
+      }
       lastFailure = { type: "error", error };
     }
   }

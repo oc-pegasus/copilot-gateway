@@ -109,6 +109,7 @@ export const serveMessages = async (
         );
       },
       preferredAccountId,
+      { endpoint: "/v1/messages", apiKeyId },
     );
 
     return await respondMessages(

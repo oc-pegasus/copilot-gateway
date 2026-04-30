@@ -126,7 +126,7 @@ export const serveResponses = async (
         ),
         chatPayload.model,
       );
-    }, preferredAccountId);
+    }, preferredAccountId, { endpoint: "/v1/responses", apiKeyId });
 
     if (result instanceof Response) return result;
 

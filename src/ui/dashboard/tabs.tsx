@@ -179,6 +179,15 @@ export function renderDashboardHeader() {
               Settings
             </button>
           </template>
+          <template x-if="isAdmin">
+            <button
+              @click="switchTab('errors')"
+              class="shrink-0 px-2 py-2 rounded-md text-xs font-medium transition-all sm:px-4 sm:text-sm"
+              :class="tab === 'errors' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'"
+            >
+              Errors
+            </button>
+          </template>
         </nav>
 
         <button @click="logout()" class="btn-ghost text-xs ml-auto shrink-0">Logout</button>
@@ -1905,3 +1914,118 @@ export function renderModelsTab() {
       </div>
     `;
   }
+
+export function renderErrorsTab() {
+  return html`
+    <template x-if="isAdmin">
+      <div
+        x-show="tab === 'errors'"
+        x-transition:enter="transition ease-out duration-200"
+        x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100"
+      >
+        <div class="glass-card p-6 animate-in">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div class="flex items-center gap-3">
+              <span class="text-xs font-medium text-gray-500 uppercase tracking-widest">Error Log</span>
+              <template x-if="errorsLoading">
+                <svg class="animate-spin h-3.5 w-3.5 text-gray-500" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" opacity="0.25" />
+                  <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75" />
+                </svg>
+              </template>
+            </div>
+            <div class="flex max-w-full items-center gap-1 overflow-x-auto bg-surface-800 rounded-lg p-0.5">
+              <button
+                @click="switchErrorRange('today')"
+                class="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+                :class="errorRange === 'today' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'"
+              >Last Day</button>
+              <button
+                @click="switchErrorRange('7d')"
+                class="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+                :class="errorRange === '7d' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'"
+              >7 Days</button>
+              <button
+                @click="switchErrorRange('30d')"
+                class="shrink-0 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+                :class="errorRange === '30d' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'"
+              >30 Days</button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-surface-800 rounded-lg p-4 text-center">
+              <p class="text-xs text-gray-500 mb-1">Total Errors</p>
+              <p class="text-xl font-bold font-mono text-white" x-text="errorEntries.length"></p>
+            </div>
+            <div class="bg-surface-800 rounded-lg p-4 text-center">
+              <p class="text-xs text-gray-500 mb-1">429 Rate Limits</p>
+              <p class="text-xl font-bold font-mono text-accent-amber" x-text="errorEntries.filter(e => e.statusCode === 429).length"></p>
+            </div>
+            <div class="bg-surface-800 rounded-lg p-4 text-center">
+              <p class="text-xs text-gray-500 mb-1">5xx Errors</p>
+              <p class="text-xl font-bold font-mono text-accent-rose" x-text="errorEntries.filter(e => e.statusCode >= 500).length"></p>
+            </div>
+            <div class="bg-surface-800 rounded-lg p-4 text-center">
+              <p class="text-xs text-gray-500 mb-1">Fallback Events</p>
+              <p class="text-xl font-bold font-mono text-accent-cyan" x-text="errorEntries.filter(e => e.wasFallback).length"></p>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <template x-if="errorEntries.length === 0 && !errorsLoading">
+              <p class="text-sm text-gray-500 py-4 text-center">No errors in this time range.</p>
+            </template>
+            <template x-if="errorEntries.length > 0">
+              <table class="w-full min-w-[700px] text-sm">
+                <thead>
+                  <tr class="border-b border-white/5">
+                    <th class="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-widest">Time</th>
+                    <th class="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-widest">Account</th>
+                    <th class="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-widest">Model</th>
+                    <th class="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-widest">Endpoint</th>
+                    <th class="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-widest">Status</th>
+                    <th class="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase tracking-widest">Fallback</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="entry in errorEntries" :key="entry.id">
+                    <tr class="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                      <td class="py-2.5 px-3">
+                        <span class="text-gray-400 text-xs font-mono" x-text="entry.timestamp"></span>
+                      </td>
+                      <td class="py-2.5 px-3">
+                        <span class="text-gray-300 text-xs" x-text="entry.accountId ?? '—'"></span>
+                      </td>
+                      <td class="py-2.5 px-3">
+                        <span class="text-gray-300 text-xs font-mono truncate max-w-[200px] inline-block" x-text="entry.model ?? '—'"></span>
+                      </td>
+                      <td class="py-2.5 px-3">
+                        <span class="text-gray-400 text-xs font-mono" x-text="entry.endpoint"></span>
+                      </td>
+                      <td class="py-2.5 px-3">
+                        <span
+                          class="text-xs font-bold px-2 py-0.5 rounded-full"
+                          :class="entry.statusCode === 429 ? 'bg-accent-amber/10 text-accent-amber' : entry.statusCode >= 500 ? 'bg-accent-rose/10 text-accent-rose' : 'bg-surface-600 text-gray-300'"
+                          x-text="entry.statusCode"
+                        ></span>
+                      </td>
+                      <td class="py-2.5 px-3">
+                        <span
+                          x-show="entry.wasFallback"
+                          class="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-accent-cyan/10 text-accent-cyan"
+                        >Yes</span>
+                        <span x-show="!entry.wasFallback" class="text-gray-600 text-xs">—</span>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </template>
+          </div>
+        </div>
+      </div>
+    </template>
+  `;
+}
