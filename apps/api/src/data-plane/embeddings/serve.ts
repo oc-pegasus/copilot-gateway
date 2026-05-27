@@ -4,6 +4,7 @@
 import type { Context } from 'hono';
 
 import { apiKeyUpstreamIdsFromContext } from '../../middleware/auth.ts';
+import { getRepo } from '../../repo/index.ts';
 import type { BackgroundScheduler } from '../../runtime/background.ts';
 import { backgroundSchedulerFromContext } from '../../runtime/background.ts';
 import { toInternalDebugError } from '../llm/shared/errors/internal-debug-error.ts';
@@ -117,6 +118,17 @@ export const embeddings = async (c: Context): Promise<Response> => {
       if (!response.ok) {
         recordUpstreamPerformance(scheduleBackground, performanceContext, true, performance.now() - upstreamStartedAt);
         recordRequestPerformanceForApiKey(apiKeyId, scheduleBackground, performanceContext, true, performance.now() - requestStartedAt);
+        void response.clone().text().then(body => {
+          void getRepo().errorLog.record({
+            apiKeyId,
+            model: modelId,
+            endpoint: 'embeddings',
+            upstream: binding.upstream ?? undefined,
+            statusCode: response.status,
+            errorBody: body.length > 4096 ? body.slice(0, 4096) : body,
+            wasFallback: false,
+          }).catch(() => {});
+        }).catch(() => {});
         return proxyJsonResponse(response);
       }
 

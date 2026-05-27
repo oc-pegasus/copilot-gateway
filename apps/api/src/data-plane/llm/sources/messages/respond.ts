@@ -9,7 +9,7 @@ import { type InternalDebugError, toInternalDebugError } from '../../shared/erro
 import type { ExecuteResult } from '../../shared/errors/result.ts';
 import { upstreamErrorToResponse } from '../../shared/errors/upstream-error.ts';
 import { type StreamCompletion, writeSSEFrames } from '../../shared/stream/proxy-sse.ts';
-import { createSourceStreamState, eventResultMetadata, recordSourcePerformance, recordSourceUsage, rememberSourceFrameUsage, sourceStreamFailed } from '../respond.ts';
+import { createSourceStreamState, eventResultMetadata, recordSourcePerformance, recordSourceUsage, recordUpstreamErrorLog, rememberSourceFrameUsage, sourceStreamFailed } from '../respond.ts';
 import { type ProtocolFrame, sseFrame } from '@floway-dev/protocols/common';
 import type { MessagesMessageDeltaEvent, MessagesStreamEventData, MessagesUsage } from '@floway-dev/protocols/messages';
 
@@ -107,6 +107,7 @@ export const respondMessages = async (
 ): Promise<Response> => {
   if (result.type === 'upstream-error') {
     recordSourcePerformance(request, result.performance, true);
+    recordUpstreamErrorLog(result, 'messages', request);
     return upstreamErrorToResponse(result);
   }
 

@@ -3,6 +3,8 @@ import type {
   ApiKey,
   ApiKeyRepo,
   CacheRepo,
+  ErrorLogEntry,
+  ErrorLogRepo,
   PerformanceDimensions,
   PerformanceErrorSample,
   PerformanceLatencySample,
@@ -761,6 +763,65 @@ const parseFlagOverrides = (id: string, json: string): Record<string, boolean> =
   return normalizeFlagOverrides(out);
 };
 
+class D1ErrorLogRepo implements ErrorLogRepo {
+  constructor(private db: D1Database) {}
+
+  async record(entry: Omit<ErrorLogEntry, 'id' | 'timestamp'>): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO error_log (api_key_id, model, endpoint, upstream, status_code, error_body, was_fallback)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        entry.apiKeyId ?? null,
+        entry.model ?? null,
+        entry.endpoint,
+        entry.upstream ?? null,
+        entry.statusCode,
+        entry.errorBody ?? null,
+        entry.wasFallback ? 1 : 0,
+      )
+      .run();
+  }
+
+  async query(opts: { start: string; end: string; limit?: number }): Promise<ErrorLogEntry[]> {
+    const limit = opts.limit ?? 200;
+    const { results } = await this.db
+      .prepare('SELECT id, timestamp, api_key_id, model, endpoint, upstream, status_code, error_body, was_fallback FROM error_log WHERE timestamp >= ? AND timestamp < ? ORDER BY timestamp DESC LIMIT ?')
+      .bind(opts.start, opts.end, limit)
+      .all<ErrorLogRow>();
+    return results.map(toErrorLogEntry);
+  }
+
+  async deleteAll(): Promise<void> {
+    await this.db.prepare('DELETE FROM error_log').run();
+  }
+}
+
+interface ErrorLogRow {
+  id: number;
+  timestamp: string;
+  api_key_id: string | null;
+  model: string | null;
+  endpoint: string;
+  upstream: string | null;
+  status_code: number;
+  error_body: string | null;
+  was_fallback: number;
+}
+
+const toErrorLogEntry = (row: ErrorLogRow): ErrorLogEntry => ({
+  id: row.id,
+  timestamp: row.timestamp,
+  apiKeyId: row.api_key_id ?? undefined,
+  model: row.model ?? undefined,
+  endpoint: row.endpoint,
+  upstream: row.upstream ?? undefined,
+  statusCode: row.status_code,
+  errorBody: row.error_body ?? undefined,
+  wasFallback: row.was_fallback !== 0,
+});
+
 export class D1Repo implements Repo {
   apiKeys: ApiKeyRepo;
   usage: UsageRepo;
@@ -769,6 +830,7 @@ export class D1Repo implements Repo {
   cache: CacheRepo;
   searchConfig: SearchConfigRepo;
   upstreams: UpstreamRepo;
+  errorLog: ErrorLogRepo;
 
   constructor(db: D1Database) {
     this.apiKeys = new D1ApiKeyRepo(db);
@@ -778,5 +840,6 @@ export class D1Repo implements Repo {
     this.cache = new D1CacheRepo(db);
     this.searchConfig = new D1SearchConfigRepo(db);
     this.upstreams = new D1UpstreamRepo(db);
+    this.errorLog = new D1ErrorLogRepo(db);
   }
 }

@@ -5,6 +5,8 @@ import type {
   ApiKey,
   ApiKeyRepo,
   CacheRepo,
+  ErrorLogEntry,
+  ErrorLogRepo,
   PerformanceDimensions,
   PerformanceErrorSample,
   PerformanceLatencySample,
@@ -346,6 +348,38 @@ const cloneUpstreamRecord = (upstream: UpstreamRecord): UpstreamRecord => ({
   flagOverrides: normalizeFlagOverrides(upstream.flagOverrides),
 });
 
+class MemoryErrorLogRepo implements ErrorLogRepo {
+  private store: ErrorLogEntry[] = [];
+  private nextId = 1;
+
+  record(entry: Omit<ErrorLogEntry, 'id' | 'timestamp'>): Promise<void> {
+    this.store.push({
+      id: this.nextId++,
+      timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      ...entry,
+      wasFallback: entry.wasFallback ?? false,
+    });
+    return Promise.resolve();
+  }
+
+  query(opts: { start: string; end: string; limit?: number }): Promise<ErrorLogEntry[]> {
+    const limit = opts.limit ?? 200;
+    return Promise.resolve(
+      [...this.store]
+        .filter(e => e.timestamp >= opts.start && e.timestamp < opts.end)
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+        .slice(0, limit)
+        .map(e => ({ ...e })),
+    );
+  }
+
+  deleteAll(): Promise<void> {
+    this.store = [];
+    this.nextId = 1;
+    return Promise.resolve();
+  }
+}
+
 export class InMemoryRepo implements Repo {
   apiKeys: ApiKeyRepo;
   usage: UsageRepo;
@@ -354,6 +388,7 @@ export class InMemoryRepo implements Repo {
   cache: CacheRepo;
   searchConfig: SearchConfigRepo;
   upstreams: UpstreamRepo;
+  errorLog: ErrorLogRepo;
 
   constructor() {
     this.apiKeys = new MemoryApiKeyRepo();
@@ -363,5 +398,6 @@ export class InMemoryRepo implements Repo {
     this.cache = new MemoryCacheRepo();
     this.searchConfig = new MemorySearchConfigRepo();
     this.upstreams = new MemoryUpstreamRepo();
+    this.errorLog = new MemoryErrorLogRepo();
   }
 }

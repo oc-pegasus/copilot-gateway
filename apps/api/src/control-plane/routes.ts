@@ -4,6 +4,7 @@ import { createKey, deleteKey, listKeys, rotateKey, updateKey } from './api-keys
 import { authLogin, authLogout, authMe } from './auth/routes.ts';
 import { copilotQuota } from './copilot-quota/routes.ts';
 import { exportData, importData } from './data-transfer/routes.ts';
+import { errorLog } from './error-log/routes.ts';
 import { controlPlaneModels } from './models/routes.ts';
 import { performanceOverview, performanceTelemetry } from './performance/routes.ts';
 import { getSearchConfigRoute, putSearchConfigRoute, testSearchConfigRoute } from './search-config/routes.ts';
@@ -61,5 +62,6 @@ export const mountControlPlane = (app: Hono) => {
   adminApi.post('/search-config/test', testSearchConfigRoute);
   adminApi.get('/export', exportData);
   adminApi.post('/import', importData);
+  adminApi.get('/error-log', errorLog);
   app.route('/api', adminApi);
 };

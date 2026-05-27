@@ -10,7 +10,7 @@ import { type InternalDebugError, toInternalDebugError } from '../../shared/erro
 import type { ExecuteResult } from '../../shared/errors/result.ts';
 import { upstreamErrorToResponse } from '../../shared/errors/upstream-error.ts';
 import { type StreamCompletion, writeSSEFrames } from '../../shared/stream/proxy-sse.ts';
-import { createSourceStreamState, eventResultMetadata, recordSourcePerformance, recordSourceUsage, rememberSourceFrameUsage, sourceStreamFailed } from '../respond.ts';
+import { createSourceStreamState, eventResultMetadata, recordSourcePerformance, recordSourceUsage, recordUpstreamErrorLog, rememberSourceFrameUsage, sourceStreamFailed } from '../respond.ts';
 import { type ProtocolFrame, sseCommentFrame, sseFrame } from '@floway-dev/protocols/common';
 import { isResponsesTerminalEvent, type ResponsesResult, type ResponsesStreamEvent, type ResponseStreamEvent } from '@floway-dev/protocols/responses';
 
@@ -96,6 +96,7 @@ export const respondResponses = async (
 ): Promise<Response> => {
   if (result.type === 'upstream-error') {
     recordSourcePerformance(request, result.performance, true);
+    recordUpstreamErrorLog(result, 'responses', request);
     return upstreamErrorToResponse(result);
   }
 

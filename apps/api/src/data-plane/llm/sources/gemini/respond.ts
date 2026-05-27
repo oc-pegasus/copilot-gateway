@@ -9,7 +9,7 @@ import { type InternalDebugError, toInternalDebugError } from '../../shared/erro
 import type { ExecuteResult, UpstreamErrorResult } from '../../shared/errors/result.ts';
 import { decodeUpstreamErrorBody } from '../../shared/errors/upstream-error.ts';
 import { type StreamCompletion, writeSSEFrames } from '../../shared/stream/proxy-sse.ts';
-import { createSourceStreamState, eventResultMetadata, recordSourcePerformance, recordSourceUsage, rememberSourceFrameUsage, sourceStreamFailed } from '../respond.ts';
+import { createSourceStreamState, eventResultMetadata, recordSourcePerformance, recordSourceUsage, recordUpstreamErrorLog, rememberSourceFrameUsage, sourceStreamFailed } from '../respond.ts';
 import { type ProtocolFrame, sseCommentFrame, sseFrame } from '@floway-dev/protocols/common';
 import type { GeminiErrorResponse, GeminiGenerateContentResponse, GeminiStreamEvent, GeminiUsageMetadata } from '@floway-dev/protocols/gemini';
 
@@ -195,6 +195,7 @@ export const respondGemini = async (
 ): Promise<Response> => {
   if (result.type === 'upstream-error') {
     recordSourcePerformance(request, result.performance, true);
+    recordUpstreamErrorLog(result, 'gemini', request);
     return geminiUpstreamErrorResponse(result);
   }
 

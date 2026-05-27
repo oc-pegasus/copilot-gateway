@@ -239,6 +239,15 @@ export function renderDashboardHeader() {
           >
             Performance
           </button>
+          <template x-if="isAdmin">
+            <button
+              @click="switchTab('errors')"
+              class="shrink-0 px-2 py-2 rounded-md text-xs font-medium transition-all sm:px-4 sm:text-sm"
+              :class="tab === 'errors' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'"
+            >
+              Errors
+            </button>
+          </template>
         </nav>
 
         <button @click="logout()" class="btn-ghost text-xs ml-auto shrink-0">Logout</button>
@@ -911,6 +920,89 @@ export function renderPerformanceTab() {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+export function renderErrorsTab() {
+  return html`
+    <div x-show="tab === 'errors'" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
+      <div class="glass-card p-5 sm:p-6 mb-6 animate-in">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+          <span class="text-xs font-medium text-gray-500 uppercase tracking-widest">Error Log</span>
+          <div class="flex gap-1 bg-surface-800 rounded-lg p-0.5">
+            <button @click="switchErrorLogRange('1d')" class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors" :class="errorLogRange === '1d' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'">Last Day</button>
+            <button @click="switchErrorLogRange('7d')" class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors" :class="errorLogRange === '7d' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'">7 Days</button>
+            <button @click="switchErrorLogRange('30d')" class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors" :class="errorLogRange === '30d' ? 'bg-surface-600 text-white' : 'text-gray-500 hover:text-gray-300'">30 Days</button>
+          </div>
+        </div>
+
+        <template x-if="errorLogLoading">
+          <div class="flex justify-center py-12">
+            ${spinner('w-6 h-6 text-accent-cyan')}
+          </div>
+        </template>
+
+        <template x-if="!errorLogLoading">
+          <div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+              <div class="bg-surface-800 rounded-lg p-3 text-center">
+                <span class="block text-xs text-gray-500 mb-1">Total Errors</span>
+                <span class="block text-lg font-bold font-mono text-white" x-text="errorLogSummary.total"></span>
+              </div>
+              <div class="bg-surface-800 rounded-lg p-3 text-center">
+                <span class="block text-xs text-gray-500 mb-1">429 Rate Limits</span>
+                <span class="block text-lg font-bold font-mono text-amber-400" x-text="errorLogSummary.rateLimits"></span>
+              </div>
+              <div class="bg-surface-800 rounded-lg p-3 text-center">
+                <span class="block text-xs text-gray-500 mb-1">5xx Errors</span>
+                <span class="block text-lg font-bold font-mono text-red-400" x-text="errorLogSummary.serverErrors"></span>
+              </div>
+              <div class="bg-surface-800 rounded-lg p-3 text-center">
+                <span class="block text-xs text-gray-500 mb-1">Fallback Events</span>
+                <span class="block text-lg font-bold font-mono text-blue-400" x-text="errorLogSummary.fallbacks"></span>
+              </div>
+            </div>
+
+            <template x-if="errorLogData.length === 0">
+              <p class="text-sm text-gray-500 text-center py-6">No errors recorded in this time range.</p>
+            </template>
+
+            <template x-if="errorLogData.length > 0">
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                  <thead>
+                    <tr class="border-b border-white/[0.06] text-gray-500">
+                      <th class="text-left py-2 px-2 font-medium">Time</th>
+                      <th class="text-left py-2 px-2 font-medium">API Key</th>
+                      <th class="text-left py-2 px-2 font-medium">Model</th>
+                      <th class="text-left py-2 px-2 font-medium">Endpoint</th>
+                      <th class="text-left py-2 px-2 font-medium">Status</th>
+                      <th class="text-left py-2 px-2 font-medium">Upstream</th>
+                      <th class="text-left py-2 px-2 font-medium">Fallback</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="entry in errorLogData" :key="entry.id">
+                      <tr class="border-b border-white/[0.04] hover:bg-white/[0.02]">
+                        <td class="py-2 px-2 font-mono text-gray-400 whitespace-nowrap" x-text="entry.timestamp"></td>
+                        <td class="py-2 px-2 text-gray-400 max-w-[80px] truncate" x-text="entry.apiKeyId ? entry.apiKeyId.slice(0, 8) : '\\u2014'"></td>
+                        <td class="py-2 px-2 text-gray-300 max-w-[120px] truncate" x-text="entry.model || '\\u2014'"></td>
+                        <td class="py-2 px-2 text-gray-400" x-text="entry.endpoint"></td>
+                        <td class="py-2 px-2">
+                          <span class="font-mono font-bold" :class="entry.statusCode === 429 ? 'text-amber-400' : entry.statusCode >= 500 ? 'text-red-400' : 'text-gray-300'" x-text="entry.statusCode"></span>
+                        </td>
+                        <td class="py-2 px-2 text-gray-400 max-w-[80px] truncate" x-text="entry.upstream || '\\u2014'"></td>
+                        <td class="py-2 px-2" x-text="entry.wasFallback ? 'Yes' : '\\u2014'"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+        </template>
       </div>
     </div>
   `;

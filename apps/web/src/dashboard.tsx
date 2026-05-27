@@ -1,7 +1,7 @@
 import { html } from 'hono/html';
 
 import { dashboardAssets } from './dashboard/client.tsx';
-import { renderDashboardHeader, renderKeysTab, renderModelsTab, renderPerformanceTab, renderSettingsTab, renderUsageTab } from './dashboard/tabs.tsx';
+import { renderDashboardHeader, renderErrorsTab, renderKeysTab, renderModelsTab, renderPerformanceTab, renderSettingsTab, renderUsageTab } from './dashboard/tabs.tsx';
 import { Layout } from './layout.tsx';
 
 export function DashboardPage() {
@@ -14,7 +14,7 @@ export function DashboardPage() {
 
         ${renderDashboardHeader()}
 
-        <main class="max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-5 pb-8">${renderSettingsTab()} ${renderModelsTab()} ${renderKeysTab()} ${renderUsageTab()} ${renderPerformanceTab()}</main>
+        <main class="max-w-6xl mx-auto px-4 sm:px-6 pt-4 sm:pt-5 pb-8">${renderSettingsTab()} ${renderModelsTab()} ${renderKeysTab()} ${renderUsageTab()} ${renderPerformanceTab()} ${renderErrorsTab()}</main>
       </div>
 
       ${dashboardAssets()}

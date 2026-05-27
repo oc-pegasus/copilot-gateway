@@ -14,7 +14,7 @@ export function dashboardAssets() {
     <script>
       function dashboardApp() {
         const isAdmin = localStorage.getItem('isAdmin') === '1';
-        const TABS = isAdmin ? ['settings', 'models', 'keys', 'usage', 'performance'] : ['models', 'keys', 'usage', 'performance'];
+        const TABS = isAdmin ? ['settings', 'models', 'keys', 'usage', 'performance', 'errors'] : ['models', 'keys', 'usage', 'performance'];
         const defaultTab = isAdmin ? 'settings' : 'models';
         const initTab = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : defaultTab;
 
@@ -618,6 +618,10 @@ export function dashboardAssets() {
           performanceRuntimeRows: [],
           performanceLoading: false,
           performanceSummary: { requests: 0, errors: 0, avgMs: null, p50Ms: null, p95Ms: null, p99Ms: null },
+          errorLogData: [],
+          errorLogLoading: false,
+          errorLogRange: '1d',
+          errorLogSummary: { total: 0, rateLimits: 0, serverErrors: 0, fallbacks: 0 },
           chartsReady: false,
           tokenLoading: false,
           tokenSummary: { requests: 0, total: 0, input: 0, output: 0, cacheRead: 0, cacheCreation: 0, prefill: 0 },
@@ -870,6 +874,9 @@ export function dashboardAssets() {
               if (this.isAdmin && !this.upstreamsLoaded) this.loadUpstreams();
             } else if (t === 'models') {
               if (this.allModels.length === 0) await this.loadAllModels();
+            } else if (t === 'errors') {
+              this.errorLogLoading = true;
+              await this.loadErrorLog();
             }
           },
 
@@ -2131,6 +2138,39 @@ export function dashboardAssets() {
             this.performanceSummary = row
               ? { requests: row.requests, errors: row.errors, avgMs: row.avgMs, p50Ms: row.p50Ms, p95Ms: row.p95Ms, p99Ms: row.p99Ms }
               : { requests: 0, errors: 0, avgMs: null, p50Ms: null, p95Ms: null, p99Ms: null };
+          },
+
+          errorLogTimeRange() {
+            const now = new Date();
+            const ranges = { '1d': 1, '7d': 7, '30d': 30 };
+            const days = ranges[this.errorLogRange] || 1;
+            const start = new Date(now.getTime() - days * 86400000);
+            return { start: start.toISOString().replace('T', ' ').slice(0, 19), end: now.toISOString().replace('T', ' ').slice(0, 19) };
+          },
+
+          async loadErrorLog() {
+            this.errorLogLoading = true;
+            try {
+              const { start, end } = this.errorLogTimeRange();
+              const res = await fetch('/api/error-log?start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end) + '&limit=500', { headers: this.authHeaders() });
+              if (!res.ok) throw new Error('Failed to load error log');
+              const data = await res.json();
+              this.errorLogData = Array.isArray(data) ? data : [];
+              const total = this.errorLogData.length;
+              const rateLimits = this.errorLogData.filter(e => e.statusCode === 429).length;
+              const serverErrors = this.errorLogData.filter(e => e.statusCode >= 500).length;
+              const fallbacks = this.errorLogData.filter(e => e.wasFallback).length;
+              this.errorLogSummary = { total, rateLimits, serverErrors, fallbacks };
+            } catch (e) {
+              console.error('loadErrorLog:', e);
+            } finally {
+              this.errorLogLoading = false;
+            }
+          },
+
+          async switchErrorLogRange(range) {
+            this.errorLogRange = range;
+            await this.loadErrorLog();
           },
 
           renderPerformanceChart() {

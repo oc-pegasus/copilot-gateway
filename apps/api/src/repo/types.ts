@@ -156,6 +156,24 @@ export interface UpstreamRepo {
   deleteAll(): Promise<void>;
 }
 
+export interface ErrorLogEntry {
+  id?: number;
+  timestamp: string;
+  apiKeyId?: string;
+  model?: string;
+  endpoint: string;
+  upstream?: string;
+  statusCode: number;
+  errorBody?: string;
+  wasFallback: boolean;
+}
+
+export interface ErrorLogRepo {
+  record(entry: Omit<ErrorLogEntry, 'id' | 'timestamp'>): Promise<void>;
+  query(opts: { start: string; end: string; limit?: number }): Promise<ErrorLogEntry[]>;
+  deleteAll(): Promise<void>;
+}
+
 export interface Repo {
   apiKeys: ApiKeyRepo;
   usage: UsageRepo;
@@ -164,4 +182,5 @@ export interface Repo {
   cache: CacheRepo;
   searchConfig: SearchConfigRepo;
   upstreams: UpstreamRepo;
+  errorLog: ErrorLogRepo;
 }
